@@ -15,13 +15,13 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        // Fill the screen on launch. Hyprland ignores client maximize
-        // requests (Omarchy suppresses the maximize event), so it gets a
-        // real fullscreen request; other desktops get maximized. The
-        // Wayland backend has no surface proxy yet at Opened time and
-        // compositors drop state changes made while the window is still
-        // being mapped, so the request is re-issued a few times after open
-        // until it lands.
+        // Ask the compositor to fill the screen. Hyprland ignores maximize
+        // (Omarchy suppresses the maximize event) and drops fullscreen
+        // requests made while the window is still being mapped (the Wayland
+        // backend has no surface proxy yet at Opened time). Re-issue the
+        // request a few times after open; the requests are idempotent, and
+        // once one lands the compositor confirms it. WindowState cannot be
+        // read back for this because Avalonia echoes the locally-set value.
         Opened += (_, _) =>
         {
             AppRuntime.Clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
