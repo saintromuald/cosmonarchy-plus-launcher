@@ -39,10 +39,14 @@ public sealed class PluginStager
             case Variant.Plus:
                 StagePlus();
                 StageRollback();
-                if (role == NetcodeRole.Solo)
+                // No role means a normal skirmish: the armed host/join path
+                // drives the netcode's turn system, which ignores ordinary
+                // mouse/keyboard input while it is under development. Mirrors
+                // cosmo-variant, where Solo is the default and Enter picks it.
+                if (role is null or NetcodeRole.Solo)
                     Disarm();
                 else
-                    Arm(role ?? NetcodeRole.Host);
+                    Arm(role.Value);
                 break;
         }
     }

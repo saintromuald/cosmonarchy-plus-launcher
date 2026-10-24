@@ -187,7 +187,11 @@ public sealed class InstallService
             else
             {
                 repo.Fetch(progress);
-                repo.ResetTo(commitSha ?? $"{remoteName}/main", progress);
+                var branch = string.IsNullOrWhiteSpace(_repo.Branch) ? "main" : _repo.Branch;
+                if (commitSha is null)
+                    repo.CheckoutBranch(branch, remoteName, progress);
+                else
+                    repo.ResetTo(commitSha, progress);
             }
         }
         else

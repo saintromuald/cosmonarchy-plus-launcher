@@ -20,7 +20,8 @@ public sealed record RepoEntry(
     RepoKind Kind,
     string? CmbwRootUrl = null,
     string? BuildDir = null,
-    bool Unofficial = false
+    bool Unofficial = false,
+    string Branch = "main"
 )
 {
     public override string ToString() => Name;

@@ -19,7 +19,10 @@ public static class RepoCatalog
             "Release (My Build)",
             "https://github.com/saintromuald/cosmonarchy-bw-release.git",
             RepoKind.Game,
-            BuildDir: "Release"
+            BuildDir: "Release",
+            // The mirror's `main` is the September snapshot; every build since
+            // (gptp sync, plugins, lobby templates) lives on `plus`.
+            Branch: "plus"
         ),
         new(
             "prerelease",

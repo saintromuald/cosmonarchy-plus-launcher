@@ -91,6 +91,40 @@ public sealed class RepoManager : IDisposable
             repo.Submodules.Update(submodule.Name, new SubmoduleUpdateOptions { Init = true });
     }
 
+    /// <summary>Check out <paramref name="branch"/> and fast-forward it to
+    /// <paramref name="remoteName"/>/<paramref name="branch"/>.
+    ///
+    /// A plain Reset(Hard, "remote/branch") moves whatever branch is currently
+    /// checked out, so updating the Release install while its `plus` branch was
+    /// checked out used to rewrite `plus` to the mirror's `main` snapshot. This
+    /// checks the intended branch out first, and creates it when missing.</summary>
+    public void CheckoutBranch(string branch, string remoteName, IProgress<string>? progress = null)
+    {
+        var repo = Open();
+        var remoteRef = repo.Refs[$"refs/remotes/{remoteName}/{branch}"]
+                        ?? throw new InvalidOperationException(
+                            $"Remote {remoteName} has no branch {branch} in {_dir}");
+        var commit = repo.Lookup<Commit>(remoteRef.TargetIdentifier)
+                     ?? throw new InvalidOperationException($"Cannot resolve {remoteName}/{branch}");
+
+        var local = repo.Branches[branch];
+        if (local is null)
+        {
+            local = repo.CreateBranch(branch, commit);
+            repo.Branches.Update(local, b => b.TrackedBranch = remoteRef.CanonicalName);
+            progress?.Report($"Created {branch} tracking {remoteName}/{branch}");
+        }
+
+        progress?.Report($"Checking out {branch} ({commit.Id.Sha[..8]})");
+        Commands.Checkout(repo, local, new CheckoutOptions
+        {
+            CheckoutModifiers = CheckoutModifiers.Force,
+        });
+        repo.Reset(ResetMode.Hard, commit);
+        foreach (var submodule in repo.Submodules)
+            repo.Submodules.Update(submodule.Name, new SubmoduleUpdateOptions { Init = true });
+    }
+
     public IReadOnlyList<CommitInfo> Log(int maxCount = 200)
     {
         var repo = Open();

@@ -1,6 +1,7 @@
 using CosmonarchyPlusLauncher.Core.Models;
 using CosmonarchyPlusLauncher.Core.Services;
 using CosmonarchyPlusLauncher.Core.Settings;
+using LibGit2Sharp;
 
 namespace CosmonarchyPlusLauncher.Core.Tests;
 
@@ -63,6 +64,52 @@ public class CoreTests
     }
 
     [Fact]
+    public void RepoCatalog_my_build_tracks_the_plus_branch()
+    {
+        Assert.Equal("plus", RepoCatalog.Find("release")!.Branch);
+        Assert.Equal("main", RepoCatalog.Find("prerelease")!.Branch);
+    }
+
+    [Fact]
+    public void CheckoutBranch_moves_head_without_rewriting_other_branches()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"cpl-branch-{Guid.NewGuid():N}");
+        var remoteDir = Path.Combine(tmp, "remote");
+        var cloneDir = Path.Combine(tmp, "clone");
+        Directory.CreateDirectory(remoteDir);
+        try
+        {
+            Repository.Init(remoteDir);
+            using var seed = new Repository(remoteDir);
+            var sig = new Signature("t", "t@example.com", DateTimeOffset.UtcNow);
+            File.WriteAllText(Path.Combine(remoteDir, "a.txt"), "a");
+            Commands.Stage(seed, "*");
+            var mainTip = seed.Commit("A", sig, sig);
+            var mainName = seed.Head.FriendlyName;
+            var plus = seed.CreateBranch("plus");
+            Commands.Checkout(seed, plus);
+            File.WriteAllText(Path.Combine(remoteDir, "b.txt"), "b");
+            Commands.Stage(seed, "*");
+            seed.Commit("B", sig, sig);
+            Commands.Checkout(seed, seed.Branches[mainName]); // keep the remote's default branch on main
+
+            Repository.Clone(remoteDir, cloneDir);
+            using var mgr = new RepoManager(cloneDir, remoteDir);
+            mgr.Fetch();
+            mgr.CheckoutBranch("plus", "origin");
+
+            using var clone = new Repository(cloneDir);
+            Assert.Equal("plus", clone.Head.FriendlyName);
+            Assert.Equal("B", clone.Head.Tip.MessageShort);
+            Assert.Equal(mainTip.Sha, clone.Branches[mainName].Tip.Sha);
+        }
+        finally
+        {
+            Directory.Delete(tmp, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Settings_save_without_a_path_writes_back_to_the_loaded_file()
     {
         var path = Path.Combine(Path.GetTempPath(), $"cpl-test-{Guid.NewGuid():N}.json");
@@ -81,6 +128,39 @@ public class CoreTests
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void PluginStager_plus_without_a_role_disarms()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"cpl-stage-{Guid.NewGuid():N}");
+        var build = Path.Combine(tmp, "Release");
+        var plugins = Path.Combine(build, "plugins");
+        var stage = Path.Combine(tmp, "variants");
+        Directory.CreateDirectory(plugins);
+        Directory.CreateDirectory(stage);
+        File.WriteAllText(Path.Combine(stage, "zz-cosmo-plus.qdp"), "plus");
+        File.WriteAllText(Path.Combine(stage, "zz-cosmo-rollback.qdp"), "rollback");
+        File.WriteAllText(Path.Combine(plugins, "cosmo_rollback.conf"), "stale");
+
+        Environment.SetEnvironmentVariable("CM_ROLLBACK_LIVE", "1");
+        Environment.SetEnvironmentVariable("CM_ROLLBACK_SLOT", "0");
+        try
+        {
+            new PluginStager(build, stage, tmp).Apply(Variant.Plus, null);
+
+            Assert.True(File.Exists(Path.Combine(plugins, "zz-cosmo-plus.qdp")));
+            Assert.True(File.Exists(Path.Combine(plugins, "zz-cosmo-rollback.qdp")));
+            Assert.Null(Environment.GetEnvironmentVariable("CM_ROLLBACK_LIVE"));
+            Assert.Null(Environment.GetEnvironmentVariable("CM_ROLLBACK_SLOT"));
+            Assert.False(File.Exists(Path.Combine(plugins, "cosmo_rollback.conf")));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CM_ROLLBACK_LIVE", null);
+            Environment.SetEnvironmentVariable("CM_ROLLBACK_SLOT", null);
+            Directory.Delete(tmp, recursive: true);
         }
     }
 

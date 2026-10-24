@@ -145,6 +145,7 @@ public partial class PlayViewModel : ViewModelBase
         var repo = SelectedRepo;
         if (repo is null)
             return;
+        _settings.NetcodeRole = Role;   // persist the effective role (Solo default)
         var sha = SelectedVersion?.Sha is "HEAD" ? null : SelectedVersion?.Sha;
         await RunAsync(async (service, progress, ct) =>
             await service.InstallAsync(sha, progress, ct), repo);
@@ -157,6 +158,7 @@ public partial class PlayViewModel : ViewModelBase
         var repo = SelectedRepo;
         if (repo is null)
             return;
+        _settings.NetcodeRole = Role;   // persist the effective role (Solo default)
         var sha = SelectedVersion?.Sha is "HEAD" ? null : SelectedVersion?.Sha;
         await RunAsync(async (service, progress, ct) =>
             await service.PlayAsync(sha, progress, ct), repo);
