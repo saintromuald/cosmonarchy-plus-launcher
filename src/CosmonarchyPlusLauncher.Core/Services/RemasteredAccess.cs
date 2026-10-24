@@ -47,6 +47,14 @@ public static class RemasteredAccess
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                      ".local", "share", "cosmonarchy-remastered", "run-samase.sh");
 
+    /// <summary>Installed bundle version marker (the GitHub release tag).</summary>
+    public static string BundleVersionPath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                     ".local", "share", "cosmonarchy-remastered", "version.txt");
+
+    /// <summary>A resolved channel release: download URL + identifying tag.</summary>
+    public sealed record BundleRelease(string Url, string Tag);
+
     public static bool IsBundleInstalled =>
         OperatingSystem.IsLinux() && File.Exists(BundleScriptPath);
 
@@ -67,23 +75,44 @@ public static class RemasteredAccess
         settings.Save();
 
         if (IsBundleInstalled)
-            return "Unlocked on this machine.";
+        {
+            var localTag = File.Exists(BundleVersionPath)
+                ? File.ReadAllText(BundleVersionPath).Trim()
+                : "";
+            var latest = ResolveLatest(settings.RemasteredChannel);
+            if (latest.Tag == localTag)
+                return "Unlocked on this machine (latest bundle).";
+            var updated = EnsureBundle(settings, password, latest);
+            return updated ? $"Unlocked; bundle updated to {latest.Tag}."
+                           : "Unlocked, but the bundle update could not be fetched.";
+        }
 
-        var result = EnsureBundle(settings, password);
-        return result ? "Unlocked; bundle installed."
-                      : "Unlocked, but the bundle could not be fetched (see status).";
+        var first = EnsureBundle(settings, password);
+        return first ? "Unlocked; bundle installed."
+                     : "Unlocked, but the bundle could not be fetched.";
     }
 
     /// <summary>Download, decrypt and extract the private bundle.</summary>
-    public static bool EnsureBundle(AppSettings settings, string password)
+    public static bool EnsureBundle(AppSettings settings, string password,
+        BundleRelease? resolved = null)
     {
         if (!OperatingSystem.IsLinux())
             return false;
         try
         {
-            var url = string.IsNullOrWhiteSpace(settings.RemasteredBundleUrl)
-                ? ResolveLatestAssetUrl(settings.RemasteredChannel)
-                : settings.RemasteredBundleUrl;
+            string url;
+            string tag;
+            if (!string.IsNullOrWhiteSpace(settings.RemasteredBundleUrl))
+            {
+                url = settings.RemasteredBundleUrl;
+                tag = "manual";
+            }
+            else
+            {
+                var r = resolved ?? ResolveLatest(settings.RemasteredChannel);
+                url = r.Url;
+                tag = r.Tag;
+            }
             var blob = Fetch(url);
             var plain = Decrypt(blob, password);
             var dest = Path.GetDirectoryName(BundleScriptPath)!;
@@ -91,6 +120,7 @@ public static class RemasteredAccess
             using var ms = new MemoryStream(plain);
             using var gz = new GZipStream(ms, CompressionMode.Decompress);
             TarFile.ExtractToDirectory(gz, dest, overwriteFiles: true);
+            File.WriteAllText(BundleVersionPath, tag);
             return true;
         }
         catch
@@ -102,7 +132,7 @@ public static class RemasteredAccess
     /// <summary>Resolve the newest bundle asset of the given channel from
     /// GitHub releases. Public repo, no auth needed; the payload is
     /// ciphertext and useless without the unlock password.</summary>
-    public static string ResolveLatestAssetUrl(string channel)
+    public static BundleRelease ResolveLatest(string channel)
     {
         var client = new Octokit.GitHubClient(
             new Octokit.ProductHeaderValue("CosmonarchyPlusLauncher"));
@@ -123,7 +153,7 @@ public static class RemasteredAccess
         }
         var asset = release.Assets.FirstOrDefault(a => a.Name == BundleAssetName)
             ?? throw new InvalidOperationException($"no {BundleAssetName} asset");
-        return asset.BrowserDownloadUrl;
+        return new BundleRelease(asset.BrowserDownloadUrl, release.TagName);
     }
 
     private static byte[] Fetch(string url)
