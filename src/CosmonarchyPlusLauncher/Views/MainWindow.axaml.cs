@@ -21,7 +21,7 @@ public partial class MainWindow : Window
         // request a few times after open; the requests are idempotent, and
         // once one lands the compositor confirms it. WindowState cannot be
         // read back for this because Avalonia echoes the locally-set value.
-        Opened += (_, _) => ApplyStartupWindowState(attempts: 0); // TEST: rule-only
+        Opened += (_, _) => ApplyStartupWindowState(attempts: 8);
 
         void ApplyStartupWindowState(int attempts)
         {
