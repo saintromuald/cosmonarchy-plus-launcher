@@ -1,7 +1,7 @@
 # Maintainer: saintromuald <saintromuald@users.noreply.github.com>
 # Clean-room, open-source Cosmonarchy BW launcher.
 pkgname=cosmonarchy-plus-launcher
-pkgver=0.3.1
+pkgver=0.3.2
 pkgrel=1
 pkgdesc="Open-source cross-platform launcher for Cosmonarchy BW (install, update, variants, patches, account)"
 arch=('x86_64')
@@ -10,7 +10,7 @@ license=('MIT')
 depends=('libx11' 'libice' 'libsm' 'fontconfig' 'hicolor-icon-theme')
 makedepends=('dotnet-sdk' 'git')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/saintromuald/cosmonarchy-plus-launcher/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('329cd2b1c7ac0f58f63230303a2a56d319d04d98fc633ee9f2af9087112fca2d')
 
 build() {
   cd "$pkgname-$pkgver"
