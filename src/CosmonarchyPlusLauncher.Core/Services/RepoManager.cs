@@ -4,7 +4,9 @@ using LibGit2Sharp;
 namespace CosmonarchyPlusLauncher.Core.Services;
 
 /// <summary>Clone/fetch/reset/log for a single repository. Wraps
-/// LibGit2Sharp the same way the original launcher does, but written fresh.</summary>
+/// LibGit2Sharp. A repo counts as installed when ANY remote matches the
+/// desired URL, because existing installs often keep upstream as `origin`
+/// and the user's fork as a second remote (`mine`).</summary>
 public sealed class RepoManager : IDisposable
 {
     private readonly string _dir;
@@ -25,8 +27,35 @@ public sealed class RepoManager : IDisposable
         if (!Repository.IsValid(_dir))
             return false;
         using var repo = new Repository(_dir);
-        return repo.Network.Remotes["origin"] is { } remote &&
-               string.Equals(Normalize(remote.Url), Normalize(_url), StringComparison.OrdinalIgnoreCase);
+        return FindMatchingRemote(repo) is not null;
+    }
+
+    /// <summary>Name of the remote that points at our URL, or null.</summary>
+    public string? FindMatchingRemoteName()
+    {
+        var repo = Open();
+        return FindMatchingRemote(repo)?.Name;
+    }
+
+    private Remote? FindMatchingRemote(Repository repo) =>
+        repo.Network.Remotes.FirstOrDefault(r =>
+            string.Equals(Normalize(r.Url), Normalize(_url), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Returns the remote to use for fetch/reset, adding one named
+    /// after the repo if the URL is not configured yet.</summary>
+    public string EnsureRemoteName()
+    {
+        var repo = Open();
+        var remote = FindMatchingRemote(repo);
+        if (remote is not null)
+            return remote.Name;
+
+        var name = "launcher";
+        var n = 1;
+        while (repo.Network.Remotes[name] is not null)
+            name = $"launcher{n++}";
+        repo.Network.Remotes.Add(name, _url);
+        return name;
     }
 
     public void Clone(IProgress<string>? progress = null)
@@ -41,15 +70,19 @@ public sealed class RepoManager : IDisposable
 
     public void Fetch(IProgress<string>? progress = null)
     {
-        progress?.Report($"Fetching {_url}");
-        using var repo = Open();
-        foreach (var remote in repo.Network.Remotes)
-            repo.Network.Fetch(remote.Url, Array.Empty<string>());
+        var name = EnsureRemoteName();
+        var repo = Open();
+        var remote = repo.Network.Remotes[name] ?? throw new InvalidOperationException($"Remote {name} disappeared from {_dir}");
+        IEnumerable<string> refspecs = remote.FetchRefSpecs.Any()
+            ? remote.FetchRefSpecs.Select(s => s.Specification)
+            : new[] { $"+refs/heads/*:refs/remotes/{name}/*" };
+        progress?.Report($"Fetching {remote.Url}");
+        repo.Network.Fetch(name, refspecs);
     }
 
     public void ResetTo(string shaOrRef, IProgress<string>? progress = null)
     {
-        using var repo = Open();
+        var repo = Open();
         var commit = repo.Lookup<Commit>(shaOrRef)
                      ?? throw new InvalidOperationException($"No such commit or ref: {shaOrRef}");
         repo.Reset(ResetMode.Hard, commit);
@@ -60,7 +93,7 @@ public sealed class RepoManager : IDisposable
 
     public IReadOnlyList<CommitInfo> Log(int maxCount = 200)
     {
-        using var repo = Open();
+        var repo = Open();
         return repo.Commits.Take(maxCount).Select(c => new CommitInfo(
             c.Id.Sha,
             c.MessageShort,
@@ -69,14 +102,14 @@ public sealed class RepoManager : IDisposable
 
     public CommitInfo? NewestCommit()
     {
-        using var repo = Open();
+        var repo = Open();
         var c = repo.Commits.FirstOrDefault();
         return c is null ? null : new CommitInfo(c.Id.Sha, c.MessageShort, c.Author.When.ToString("yyyy-MM-dd HH:mm"));
     }
 
     public bool HasLocalChanges()
     {
-        using var repo = Open();
+        var repo = Open();
         return repo.RetrieveStatus(new StatusOptions()).Where(
             s => s.State != FileStatus.Ignored && !s.State.HasFlag(FileStatus.NewInWorkdir)).Any();
     }
@@ -85,10 +118,11 @@ public sealed class RepoManager : IDisposable
     /// drop the shallow boundary if libgit2 allows it.</summary>
     public void Unshallow(IProgress<string>? progress = null)
     {
+        var name = EnsureRemoteName();
         progress?.Report("Fetching full version log");
-        using var repo = Open();
-        foreach (var remote in repo.Network.Remotes)
-            repo.Network.Fetch(remote.Url, new[] { "+refs/*:refs/*" }, new FetchOptions());
+        var repo = Open();
+        var remote = repo.Network.Remotes[name] ?? throw new InvalidOperationException($"Remote {name} disappeared from {_dir}");
+        repo.Network.Fetch(name, new[] { "+refs/*:refs/*" }, new FetchOptions());
     }
 
     private Repository Open() => _repo ??= new Repository(_dir);

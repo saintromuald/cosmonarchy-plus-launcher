@@ -12,20 +12,34 @@ public sealed class InstallService
 {
     private readonly AppSettings _settings;
     private readonly RepoEntry _repo;
+    private readonly string _mapsUrl;
     private readonly PatchManifestService _patches = new();
     private readonly CrownLinkService _crownLink = new();
 
-    public InstallService(AppSettings settings, RepoEntry repo)
+    public InstallService(AppSettings settings, RepoEntry repo, string? mapsUrl = null)
     {
         _settings = settings;
         _repo = repo;
+        _mapsUrl = mapsUrl ?? RepoCatalog.Maps.Url;
     }
 
     public string InstallRoot => _settings.RootPath;
     public string StarcraftDir => Path.Combine(InstallRoot, "Starcraft");
     public string StarcraftExe => Path.Combine(StarcraftDir, "StarCraft.exe");
     public string RepoDir => Path.Combine(InstallRoot, _repo.BuildDir ?? "Release");
-    public string MapsDir => Path.Combine(StarcraftDir, "maps", "CMBW-Root");
+    public string MapsDir
+    {
+        get
+        {
+            // Windows is case-insensitive; on Linux the historical installs
+            // use Starcraft/Maps (capital M) while fresh installs may use
+            // Starcraft/maps. Prefer whichever already exists.
+            var lower = Path.Combine(StarcraftDir, "maps", "CMBW-Root");
+            if (Directory.Exists(lower))
+                return lower;
+            return Path.Combine(StarcraftDir, "Maps", "CMBW-Root");
+        }
+    }
     public string CrownLinkSnp => Path.Combine(StarcraftDir, "CrownLink.snp");
     public string GameExe => File.Exists(Path.Combine(RepoDir, "Cosmonarchy.exe"))
         ? Path.Combine(RepoDir, "Cosmonarchy.exe")
@@ -131,6 +145,7 @@ public sealed class InstallService
         using var repo = new RepoManager(RepoDir, _repo.Url);
         if (repo.IsInstalled())
         {
+            var remoteName = repo.EnsureRemoteName();
             if (repo.HasLocalChanges())
             {
                 progress?.Report("Local changes detected; launching as-is");
@@ -138,7 +153,7 @@ public sealed class InstallService
             else
             {
                 repo.Fetch(progress);
-                repo.ResetTo(commitSha ?? "origin/main", progress);
+                repo.ResetTo(commitSha ?? $"{remoteName}/main", progress);
             }
         }
         else
@@ -154,11 +169,12 @@ public sealed class InstallService
 
     private async Task EnsureMapsAsync(IProgress<string>? progress, CancellationToken ct)
     {
-        using var maps = new RepoManager(MapsDir, RepoCatalog.Maps.Url);
+        using var maps = new RepoManager(MapsDir, _mapsUrl);
         if (maps.IsInstalled())
         {
+            var remoteName = maps.EnsureRemoteName();
             maps.Fetch(progress);
-            maps.ResetTo("origin/main", progress);
+            maps.ResetTo($"{remoteName}/main", progress);
         }
         else
         {

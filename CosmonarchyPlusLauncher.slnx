@@ -6,4 +6,8 @@
   <Folder Name="/tests/">
     <Project Path="tests/CosmonarchyPlusLauncher.Core.Tests/CosmonarchyPlusLauncher.Core.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/" />
+  <Folder Name="/tools/Smoke/">
+    <Project Path="tools/Smoke/CosmonarchyPlusLauncher.Smoke.csproj" />
+  </Folder>
 </Solution>

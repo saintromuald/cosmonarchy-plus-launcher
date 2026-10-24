@@ -26,7 +26,12 @@ public enum NetcodeRole
 
 public sealed record CommitInfo(string Sha, string Message, string Date);
 
-public sealed record Patch(string Id, string Url, string Filename);
+public sealed class Patch
+{
+    public string Id { get; set; } = "";
+    public string Url { get; set; } = "";
+    public string Filename { get; set; } = "";
+}
 
 public sealed record User(
     string DiscordId,
