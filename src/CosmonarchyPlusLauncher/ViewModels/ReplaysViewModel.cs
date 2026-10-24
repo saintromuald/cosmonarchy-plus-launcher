@@ -614,6 +614,10 @@ public partial class ReplaysViewModel : ViewModelBase
         var limit = filtered ? FilteredCount : LatestCount;
         var list = matches.OrderByDescending(m => m.UploadedAt).Take(limit).ToList();
 
+        var previous = channel == ReplayChannel.Plus
+            ? SelectedPlusRow?.Match.MatchUuid
+            : SelectedOgRow?.Match.MatchUuid;
+
         target.Clear();
         foreach (var match in list)
         {
@@ -625,10 +629,13 @@ public partial class ReplaysViewModel : ViewModelBase
                 note is { Text.Length: > 0 } || (note?.Tags.Count ?? 0) > 0));
         }
 
+        var restored = previous is null
+            ? null
+            : target.FirstOrDefault(r => r.Match.MatchUuid.Equals(previous, StringComparison.OrdinalIgnoreCase));
         if (channel == ReplayChannel.Plus)
-            SelectedPlusRow = target.FirstOrDefault();
+            SelectedPlusRow = restored ?? target.FirstOrDefault();
         else
-            SelectedOgRow = target.FirstOrDefault();
+            SelectedOgRow = restored ?? target.FirstOrDefault();
 
         var name = channel == ReplayChannel.Plus ? "Cosmonarchy Plus" : "Cosmonarchy OG";
         var total = channel == ReplayChannel.Plus ? _plusAll.Count : _ogAll.Count;
