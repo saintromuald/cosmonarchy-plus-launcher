@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Input.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CosmonarchyPlusLauncher.Core.Models;
@@ -458,7 +459,10 @@ public partial class FavouritesViewModel : ViewModelBase
         try
         {
             await new CommunityService().PublishAsync(_settings.CommunityRepo, _settings.GitHubToken, share, payload);
-            return $"Published “{share.Name}” to {_settings.CommunityRepo} — it now appears in the Community tab. Log in on the Account page to stamp your Discord name on future shares.";
+            var nameHint = AppRuntime.CurrentUser is null
+                ? " Log in on the Account page to stamp your Discord name on future shares."
+                : "";
+            return $"Published “{share.Name}” to {_settings.CommunityRepo} — it now appears in the Community tab.{nameHint}";
         }
         catch (Exception ex)
         {
@@ -619,7 +623,7 @@ public partial class FavouritesViewModel : ViewModelBase
             ImportStatus = "Clipboard unavailable.";
             return;
         }
-        Import(await AppRuntime.Clipboard.GetTextAsync(), "the clipboard");
+        Import(await AppRuntime.Clipboard.TryGetTextAsync(), "the clipboard");
     }
 
     // ---- Helpers ----------------------------------------------------------

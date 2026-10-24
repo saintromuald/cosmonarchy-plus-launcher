@@ -20,6 +20,13 @@
 - [x] Settings page: root path, variant, role, action-on-play, log depth, updates
 - [x] Account page: login flow, profile stats, community link
 - [x] Replays page: list + open folder (deep-link launch in M4)
+- [x] Favourites tab: favourites with add dates and match snapshots,
+  watched/new split, notes, saved lists with names + titles
+- [x] Desync highlighting: `hasDesyncFile` games shown red with a ⚠ badge
+- [x] Sharing: Discord-ready messages (note + import code block), share files,
+  optional Discord webhook posting, import from paste/clipboard/file
+- [x] Community tab: public share board on a GitHub repo, publish/unpublish
+  with Discord-name stamping from the account login
 
 ## M2 — Windows parity
 

@@ -35,6 +35,12 @@ public partial class SettingsViewModel : ViewModelBase
     private string _discordWebhookUrl = AppRuntime.Settings.DiscordWebhookUrl ?? "";
 
     [ObservableProperty]
+    private string _communityRepo = AppRuntime.Settings.CommunityRepo;
+
+    [ObservableProperty]
+    private string _githubToken = AppRuntime.Settings.GitHubToken ?? "";
+
+    [ObservableProperty]
     private string _status = "";
 
     [ObservableProperty]
@@ -50,6 +56,10 @@ public partial class SettingsViewModel : ViewModelBase
         _settings.DiscordWebhookUrl = string.IsNullOrWhiteSpace(DiscordWebhookUrl)
             ? null
             : DiscordWebhookUrl.Trim();
+        _settings.CommunityRepo = CommunityRepo.Trim();
+        _settings.GitHubToken = string.IsNullOrWhiteSpace(GithubToken)
+            ? null
+            : GithubToken.Trim();
         _settings.Save();
         Status = "Saved.";
     }
@@ -62,6 +72,8 @@ public partial class SettingsViewModel : ViewModelBase
         ActionOnPlay = ActionOnPlay.StayOpen;
         FullVersionLog = false;
         DiscordWebhookUrl = "";
+        CommunityRepo = "saintromuald/cosmonarchy-shares";
+        GithubToken = "";
         Status = "Defaults restored — press Save to keep them.";
     }
 

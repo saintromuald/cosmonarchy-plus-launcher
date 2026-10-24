@@ -147,7 +147,8 @@ Persisted in `~/.config/cosmonarchy-plus-launcher/settings.json` (Linux) or
 
 ## 8. Replays
 
-Tabs: **Cosmonarchy OG**, **Cosmonarchy Plus**, **Local files**.
+Tabs: **Cosmonarchy OG**, **Cosmonarchy Plus**, **Local files**, plus
+**Favourites** (the local library) and **Community** (the public share board).
 
 ### Online lists
 
@@ -160,7 +161,11 @@ filter, so the pools stay separate. Latest 20 by default, up to 100 when a
 search/follow/filter is active. Followed players persist in settings
 (`followedPlayers`). The API has no paging, so the mapped summaries are cached
 for 10 minutes in
-`~/.local/share/cosmonarchy-plus-launcher/matches-cache-v2.json`.
+`~/.local/share/cosmonarchy-plus-launcher/matches-cache-v3.json`.
+
+**Desyncs** — the API flags each replay with `hasDesyncFile`. A match whose
+main replay (or any uploaded variant) carries the flag is shown with a `⚠`
+badge and the whole row in red, in the OG/Plus lists and on Favourites.
 
 ### Filters
 
@@ -178,15 +183,62 @@ Stored in `~/.local/share/cosmonarchy-plus-launcher/library.json`:
 
 - **Watched history** — every Watch records uuid, file id, build and time (list
   markers `▶`, "Watched …" in the notes panel).
-- **Favourites** — star toggle (`★` in the list, persisted).
+- **Favourites** — star toggle (`★` in the list, persisted). Each favourite
+  records **when it was added** and a snapshot of the match (players, map,
+  build, desync flag) so the Favourites tab works offline. Old libraries
+  (version 1, favourites as a plain uuid list) are migrated: the favourites
+  are kept, their add date is unknown ("earlier").
 - **Notes + tags** — per replay, with visibility **Private** (default) or
   **Shared**. Private notes never appear in exports. Tags are attached to the
   note and only shared with it.
 - **Saved lists** — a named snapshot of the filters plus the games they
-  matched. Apply restores the filters, Delete removes it, Share writes
-  `~/Downloads/Cosmonarchy-<name>.json` and copies the same JSON to the
-  clipboard. Exports include only shared notes/tags; the payload format is
-  `cosmonarchy-plus-launcher/replay-list`.
+  matched, with an optional title. Created on the Replays page ("Save
+  current") or the Favourites page ("Create list"); games are added from the
+  notes panel ("Add to list"). Apply restores the filters, Delete removes it.
+
+### Favourites tab
+
+Lists every favourite newest-first with the add date, a **New/Watched**
+split (filter: All / New / Watched) so unwatched replays stand out from
+already-watched ones, note badges, and red desync rows. Selecting one opens
+the same note editor as the Replays page (text, tags, visibility,
+save/delete, remove favourite). Favourites with no snapshot are enriched
+from the online list when it refreshes.
+
+### Share and import
+
+Everything shareable is a JSON payload with a `format` field
+(`cosmonarchy-plus-launcher/replay-note`, `…/replay-list`,
+`…/replay-favorites`). Shared notes/tags ride along; private ones never do.
+Payloads carry the sharer's site/Discord name when they are logged in.
+
+- **Share note** — copies a Discord-ready message (note text + the payload in
+  a copyable code block) to the clipboard and opens Discord.
+- **Share list / favourites** — writes `~/Downloads/Cosmonarchy-<name>.json`
+  and copies the payload; in Discord the file is attached (messages are
+  length-limited, files are not).
+- **Post to Discord** — posts the share straight to a channel through the
+  webhook URL from Settings (channel → Integrations → Webhooks). Optional.
+- **Import** (Favourites tab) — paste box, clipboard, or file picker. Accepts
+  raw JSON, code blocks, or whole Discord messages; merges favourites (first
+  add date wins), notes (newer wins), and lists (replace by id).
+
+### Community tab
+
+Public shares live in a public GitHub repo (`communityRepo` in settings,
+default `saintromuald/cosmonarchy-shares`):
+
+- `index.json` — the feed: one entry per share (file name, kind, name/title,
+  author Discord name, date, game/note counts).
+- `shares/cosmonarchy-<random>.json` — the payload files.
+
+The tab lists the index (read-only, no token needed), shows who shared what
+and when, and imports any share into the local library. **Make public**
+(Favourites tab: favourites, lists, and notes) publishes a payload file and
+updates the index; it needs a GitHub token in Settings (fine-grained,
+"Contents: read and write" on the repo). Shares carry the sharer's Discord
+name when they are logged in on the Account page, "anonymous" otherwise.
+**Unpublish** removes your own share (author Discord-id match + token).
 
 ### Watch
 

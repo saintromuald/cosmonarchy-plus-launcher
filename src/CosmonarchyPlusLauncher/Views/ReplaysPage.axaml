@@ -11,7 +11,7 @@
 
     <UserControl.Styles>
         <Style Selector="Grid.desync">
-            <Setter Property="Foreground" Value="#E81123" />
+            <Setter Property="TextElement.Foreground" Value="#E81123" />
         </Style>
     </UserControl.Styles>
 

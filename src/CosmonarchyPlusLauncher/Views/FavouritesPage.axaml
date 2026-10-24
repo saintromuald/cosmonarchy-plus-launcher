@@ -8,18 +8,27 @@
              x:Class="CosmonarchyPlusLauncher.Views.FavouritesPage"
              x:DataType="vm:FavouritesViewModel">
 
+    <UserControl.Styles>
+        <Style Selector="Grid.desync">
+            <Setter Property="TextElement.Foreground" Value="#E81123" />
+        </Style>
+    </UserControl.Styles>
+
     <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto">
 
         <TextBlock Grid.Row="0" Text="Favourites" FontSize="20" FontWeight="SemiBold" />
 
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,10,0,0">
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="0,10,0,0">
             <ComboBox Grid.Column="0" ItemsSource="{Binding Filters}" SelectedItem="{Binding Filter}"
                       MinWidth="140" />
-            <Button Grid.Column="2" Content="Refresh match info" Command="{Binding RefreshOnlineCommand}" />
-            <Button Grid.Column="3" Content="Share favourites" Command="{Binding ShareFavouritesCommand}"
-                    Margin="8,0,0,0" />
-            <Button Grid.Column="4" Content="Post to Discord" Command="{Binding PostFavouritesToDiscordCommand}"
-                    Margin="8,0,0,0" />
+            <Button Grid.Column="2" Content="Refresh info" ToolTip.Tip="Refresh match info from cosmonarchy.com"
+                    Command="{Binding RefreshOnlineCommand}" />
+            <Button Grid.Column="3" Content="Share" ToolTip.Tip="Save the favourites share file and copy its payload"
+                    Command="{Binding ShareFavouritesCommand}" Margin="8,0,0,0" />
+            <Button Grid.Column="4" Content="To Discord" ToolTip.Tip="Post the favourites share to your Discord webhook"
+                    Command="{Binding PostFavouritesToDiscordCommand}" Margin="8,0,0,0" />
+            <Button Grid.Column="5" Content="Make public" ToolTip.Tip="Publish your favourites to the community board"
+                    Command="{Binding PublishFavouritesCommand}" Margin="8,0,0,0" />
         </Grid>
 
         <TextBlock Grid.Row="2" Text="{Binding FavoritesStatus}" TextWrapping="Wrap" Margin="0,4,0,0"
@@ -39,13 +48,14 @@
                      SelectedItem="{Binding SelectedFavorite}">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:FavoriteRow">
-                        <Grid ColumnDefinitions="70,130,*,150,26,120" ToolTip.Tip="{Binding WatchTooltip}">
+                        <Grid ColumnDefinitions="70,130,*,150,26,120" ToolTip.Tip="{Binding WatchTooltip}"
+                              Classes.desync="{Binding HasDesync}">
                             <TextBlock Grid.Column="0" Text="{Binding StatusLabel}" />
                             <TextBlock Grid.Column="1" Text="{Binding AddedLabel}" />
                             <TextBlock Grid.Column="2" Text="{Binding PlayersLabel}"
                                        TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
                             <TextBlock Grid.Column="3" Text="{Binding MapName}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="4" Text="{Binding NoteBadge}" />
+                            <TextBlock Grid.Column="4" Text="{Binding Badges}" />
                             <TextBlock Grid.Column="5" Text="{Binding VersionLabel}" TextTrimming="CharacterEllipsis" />
                         </Grid>
                     </DataTemplate>
@@ -55,7 +65,7 @@
 
         <Expander Grid.Row="4" Header="Saved lists" Margin="0,8,0,0">
             <Grid Margin="8" RowDefinitions="Auto,Auto,Auto,Auto">
-                <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Column="0" Text="List:" VerticalAlignment="Center" />
                     <ComboBox Grid.Column="1" ItemsSource="{Binding SavedLists}"
                               SelectedItem="{Binding SelectedSavedList}" MinWidth="220" Margin="6,0,0,0">
@@ -68,6 +78,8 @@
                     <Button Grid.Column="2" Content="Delete" Command="{Binding DeleteListCommand}" Margin="6,0,0,0" />
                     <Button Grid.Column="3" Content="Share" Command="{Binding ShareListCommand}" Margin="6,0,0,0" />
                     <Button Grid.Column="4" Content="Post to Discord" Command="{Binding PostListToDiscordCommand}"
+                            Margin="6,0,0,0" />
+                    <Button Grid.Column="5" Content="Make public" Command="{Binding PublishListCommand}"
                             Margin="6,0,0,0" />
                 </Grid>
 
@@ -120,7 +132,7 @@
                 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                 IsVisible="{Binding HasNoteContext}">
             <Grid RowDefinitions="Auto,Auto,Auto">
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Column="0" Text="{Binding NoteHeader}" FontWeight="SemiBold"
                                TextTrimming="CharacterEllipsis" />
                     <Button Grid.Column="1" Content="Remove favourite" Command="{Binding ToggleFavoriteCommand}"
@@ -128,6 +140,8 @@
                     <Button Grid.Column="2" Content="Share note" Command="{Binding ShareNoteCommand}"
                             Margin="6,0,0,0" />
                     <Button Grid.Column="3" Content="Post to Discord" Command="{Binding PostNoteToDiscordCommand}"
+                            Margin="6,0,0,0" />
+                    <Button Grid.Column="4" Content="Publish" Command="{Binding PublishNoteCommand}"
                             Margin="6,0,0,0" />
                 </Grid>
 
