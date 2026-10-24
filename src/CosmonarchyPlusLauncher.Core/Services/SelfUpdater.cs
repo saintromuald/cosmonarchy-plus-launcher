@@ -105,10 +105,16 @@ public sealed class SelfUpdater
         TarFile.ExtractToDirectory(download, staging, overwriteFiles: true);
         File.Delete(download);
 
-        var stagedBinary = Path.Combine(staging, BinaryName);
-        if (!File.Exists(stagedBinary) || !File.Exists(Path.Combine(staging, BinaryName + ".deps.json")))
+        // The CI tarball may wrap the build in a subdirectory (e.g. linux/),
+        // so locate the build directory instead of assuming a flat archive.
+        var stagedBinary = Directory.EnumerateFiles(staging, BinaryName, SearchOption.AllDirectories)
+            .FirstOrDefault();
+        var stagedDeps = Directory.EnumerateFiles(staging, BinaryName + ".deps.json", SearchOption.AllDirectories)
+            .FirstOrDefault();
+        if (stagedBinary is null || stagedDeps is null)
             throw new InvalidOperationException(
                 "The update archive does not contain a launcher build — the release may be broken. Nothing was changed.");
+        var buildDir = Path.GetDirectoryName(stagedBinary)!;
 
         var script = Path.Combine(work, "apply.sh");
         File.WriteAllText(script, LinuxApplyScript, new UTF8Encoding(false));
@@ -122,7 +128,7 @@ public sealed class SelfUpdater
         {
             script,
             Environment.ProcessId.ToString(),
-            staging,
+            buildDir,
             installDir,
             backup,
             binary,
