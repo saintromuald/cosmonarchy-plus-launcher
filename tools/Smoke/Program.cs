@@ -20,6 +20,7 @@ public static class Program
             {
                 "--live" => await LiveAsync(),
                 "--tmp" => await TempAsync(),
+                "--mpq" => MpqAsync(),
                 _ => Usage(),
             };
         }
@@ -28,6 +29,30 @@ public static class Program
             Console.Error.WriteLine($"SMOKE FAILED: {ex}");
             return 1;
         }
+    }
+
+    private static int MpqAsync()
+    {
+        var build = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Games", "cosmonarchy", "prefix", "drive_c", "Cosmonarchy", "Release");
+        var mpq = Path.Combine(build, "temp.mpq");
+        var tree = Path.Combine(build, "mpq");
+        if (!File.Exists(mpq))
+        {
+            Console.WriteLine("temp.mpq not present");
+            return 0;
+        }
+        var probe = TempMpqChecker.ProbeArchive(mpq, tree);
+        Console.WriteLine($"probe: header={probe.HeaderOk} hashEntries={probe.HashEntries} blockEntries={probe.BlockEntries} missing={probe.Missing} treeFiles={probe.TreeFiles}");
+        Console.WriteLine($"fail: {probe.Fail.Replace("\n", " | ")}");
+        Console.WriteLine($"first missing: {probe.FirstMissing}");
+        Console.WriteLine($"hash keys: ht={TempMpqChecker.HashTableKey:X8} bt={TempMpqChecker.BlockTableKey:X8}");
+        Console.WriteLine($"first entry: {TempMpqChecker.ProbeFirstEntry(mpq)}");
+        var ok = TempMpqChecker.IsComplete(mpq, tree);
+        Console.WriteLine($"temp.mpq complete: {ok}");
+        return ok ? 0 : 1;
+
     }
 
     private static int Usage()

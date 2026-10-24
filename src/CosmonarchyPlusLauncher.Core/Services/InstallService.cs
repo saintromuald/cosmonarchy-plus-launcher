@@ -40,6 +40,18 @@ public sealed class InstallService
             return Path.Combine(StarcraftDir, "Maps", "CMBW-Root");
         }
     }
+
+    /// <summary>The directory the game watches for replay files.</summary>
+    public string ReplayGameDir
+    {
+        get
+        {
+            var lower = Path.Combine(StarcraftDir, "maps", "replays");
+            if (Directory.Exists(lower))
+                return lower;
+            return Path.Combine(StarcraftDir, "Maps", "replays");
+        }
+    }
     public string CrownLinkSnp => Path.Combine(StarcraftDir, "CrownLink.snp");
     public string GameExe => File.Exists(Path.Combine(RepoDir, "Cosmonarchy.exe"))
         ? Path.Combine(RepoDir, "Cosmonarchy.exe")
@@ -56,6 +68,7 @@ public sealed class InstallService
         await EnsureGameRepoAsync(commitSha, progress, ct);
         await EnsureMapsAsync(progress, ct);
         FixWineRegistry(progress);
+        HealTempMpq(progress);
     }
 
     public async Task PlayAsync(string? commitSha, IProgress<string>? progress = null, CancellationToken ct = default)
@@ -65,6 +78,27 @@ public sealed class InstallService
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         stager.Apply(_settings.Variant, _settings.NetcodeRole);
         progress?.Report($"Launching {_repo.Name}");
+        await LaunchAsync(ct);
+    }
+
+    /// <summary>Copy a replay into the game's replay directory and launch
+    /// into it. Replays are played on the vanilla build (the Plus plugin is
+    /// unstaged and rollback disarmed), matching how they were recorded.</summary>
+    public async Task PlayReplayAsync(string replayPath, IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        await InstallAsync(null, progress, ct);
+        var stager = new PluginStager(RepoDir, StageDir,
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        stager.Apply(Variant.Original, null);
+
+        var destination = Path.Combine(ReplayGameDir, Path.GetFileName(replayPath));
+        if (!string.Equals(Path.GetFullPath(destination), Path.GetFullPath(replayPath), StringComparison.Ordinal))
+        {
+            Directory.CreateDirectory(ReplayGameDir);
+            File.Copy(replayPath, destination, overwrite: true);
+        }
+
+        progress?.Report($"Launching replay {Path.GetFileName(replayPath)}");
         await LaunchAsync(ct);
     }
 
@@ -187,8 +221,7 @@ public sealed class InstallService
 
     /// <summary>Under Wine, the game needs ddraw overridden to
     /// native,builtin. On real Windows this is a no-op.</summary>
-    private void FixWineRegistry(IProgress<string>? progress)
-    {
+    private void FixWineRegistry(IProgress<string>? progress)    {
         if (OperatingSystem.IsWindows())
             return;
 
@@ -203,6 +236,23 @@ public sealed class InstallService
         progress?.Report("Setting Wine ddraw override");
         File.AppendAllText(wineUserReg,
             "\n[Software\\\\Wine\\\\DllOverrides] 1759553452\n\"ddraw\"=\"native,builtin\"\n");
+    }
+
+    /// <summary>Heal a truncated temp.mpq left by an interrupted hotloader
+    /// rebuild: it is removed so the game rebuilds it on this launch (black
+    /// screen for about a minute while it packs).</summary>
+    private void HealTempMpq(IProgress<string>? progress)
+    {
+        var mpq = Path.Combine(RepoDir, "temp.mpq");
+        if (!File.Exists(mpq))
+            return;
+        var tree = Path.Combine(RepoDir, "mpq");
+        if (TempMpqChecker.IsComplete(mpq, tree))
+            return;
+
+        File.Delete(mpq);
+        progress?.Report(
+            "Removed incomplete temp.mpq; the game rebuilds it now (black screen for about a minute — let it finish).");
     }
 
     private async Task LaunchAsync(CancellationToken ct)

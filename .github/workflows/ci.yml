@@ -104,8 +104,8 @@ jobs:
       - name: Zip payloads
         run: |
           cd dist
-          zip -q -r CosmonarchyPlusLauncher-win-x64.zip win-x64 || true
-          tar -czf CosmonarchyPlusLauncher-linux-x64.tar.gz linux-x64 || true
+          python3 -m zipfile -c CosmonarchyPlusLauncher-win-x64.zip win-x64/
+          tar -czf CosmonarchyPlusLauncher-linux-x64.tar.gz linux-x64
       - uses: softprops/action-gh-release@v2
         with:
           files: |

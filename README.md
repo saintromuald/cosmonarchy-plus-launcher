@@ -23,7 +23,7 @@ the Avalonia UI is scaffolded but not yet wired.
 | Play + variants (Original/Plus/Netcode) | Working (Linux launch via `umu-run`; Windows path written) |
 | Patch pipeline (StarCraft, patches.yml, CrownLink) | Working (smoke tested) |
 | Discord link + social page | Working client + Account page |
-| Replays tab | Lists + opens folder (deep-link launch later) |
+| Replays tab | Lists, opens folder, plays selected replays on the vanilla build |
 | Self-updater | GitHub Releases check in Settings |
 | Packaging | CI builds win-x64 exe, linux-x64, AppImage; Arch PKGBUILD |
 

@@ -9,7 +9,7 @@
 - [x] Account API client
 - [x] Settings persistence
 - [x] Smoke tests: live prefix + throwaway full pipeline (`tools/Smoke`)
-- [ ] Port `cosmo-tempmpq-ensure` (truncated temp.mpq healing)
+- [x] Port `cosmo-tempmpq-ensure` (truncated temp.mpq healing, verified on the real archive)
 - [ ] First real install test against the existing `~/Games/cosmonarchy` prefix
 
 ## M1 — UI

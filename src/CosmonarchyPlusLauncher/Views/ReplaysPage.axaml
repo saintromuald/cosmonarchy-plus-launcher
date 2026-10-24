@@ -11,15 +11,18 @@
 
         <TextBlock Grid.Row="0" Text="Replays" FontSize="20" FontWeight="SemiBold" />
 
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" Margin="0,10,0,0">
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,*" Margin="0,10,0,0">
             <Button Grid.Column="0" Content="Refresh" Command="{Binding RefreshCommand}" />
             <Button Grid.Column="1" Content="Open folder" Command="{Binding OpenFolderCommand}" Margin="10,0,0,0" />
-            <TextBlock Grid.Column="2" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0" />
+            <Button Grid.Column="2" Content="Play selected" Command="{Binding PlaySelectedCommand}"
+                    IsEnabled="{Binding CanPlay}" Margin="10,0,0,0" />
+            <TextBlock Grid.Column="3" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0" />
         </Grid>
 
-        <ListBox Grid.Row="2" Margin="0,10,0,0" ItemsSource="{Binding Replays}" />
+        <ListBox Grid.Row="2" Margin="0,10,0,0" ItemsSource="{Binding Replays}"
+                 SelectedItem="{Binding SelectedReplay}" />
 
-        <TextBlock Grid.Row="3" Text="Replay launching (cosmonarchy:// style deep links) lands in a later milestone; for now this lists and opens your replay folder."
+        <TextBlock Grid.Row="3" Text="Playing a replay switches to the vanilla build (no Plus plugin) and opens the game straight into it. Version-pinned replay watching (cosmonarchy:// deep links) lands in a later milestone."
                    Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                    Margin="0,8,0,0" TextWrapping="Wrap" />
     </Grid>
