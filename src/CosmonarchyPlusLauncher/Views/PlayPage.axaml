@@ -8,7 +8,7 @@
              x:Class="CosmonarchyPlusLauncher.Views.PlayPage"
              x:DataType="vm:PlayViewModel">
 
-    <Grid Margin="16" RowDefinitions="Auto,*,Auto,Auto">
+    <Grid Margin="16" RowDefinitions="Auto,*,Auto,Auto,Auto">
 
         <TextBlock Grid.Row="0" Text="Play" FontSize="20" FontWeight="SemiBold" />
 
@@ -113,7 +113,28 @@
         <Border Grid.Row="3" Margin="0,10,0,0" Padding="10"
                 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                 CornerRadius="4">
-            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+            <StackPanel Spacing="6">
+                <ProgressBar IsVisible="{Binding Busy}" Minimum="0" Maximum="100"
+                             Value="{Binding DownloadPercent}"
+                             IsIndeterminate="{Binding ProgressIndeterminate}" />
+                <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="4" Margin="0,8,0,0" Padding="10"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                CornerRadius="4"
+                IsVisible="{Binding ShowRemasteredUnlock}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Remastered access" VerticalAlignment="Center"
+                           FontWeight="SemiBold" />
+                <TextBox Text="{Binding RemasteredPassword}" PasswordChar="•"
+                         Watermark="Unlock password" MinWidth="200" />
+                <Button Content="Unlock" Command="{Binding UnlockRemasteredCommand}"
+                        MinWidth="90" />
+                <TextBlock Text="{Binding RemasteredStatus}" VerticalAlignment="Center"
+                           TextWrapping="Wrap" />
+            </StackPanel>
         </Border>
     </Grid>
 
