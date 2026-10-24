@@ -1,0 +1,157 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CosmonarchyPlusLauncher.ViewModels"
+             xmlns:core="using:CosmonarchyPlusLauncher.Core.Services"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="560"
+             x:Class="CosmonarchyPlusLauncher.Views.FavouritesPage"
+             x:DataType="vm:FavouritesViewModel">
+
+    <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto">
+
+        <TextBlock Grid.Row="0" Text="Favourites" FontSize="20" FontWeight="SemiBold" />
+
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,10,0,0">
+            <ComboBox Grid.Column="0" ItemsSource="{Binding Filters}" SelectedItem="{Binding Filter}"
+                      MinWidth="140" />
+            <Button Grid.Column="2" Content="Refresh match info" Command="{Binding RefreshOnlineCommand}" />
+            <Button Grid.Column="3" Content="Share favourites" Command="{Binding ShareFavouritesCommand}"
+                    Margin="8,0,0,0" />
+            <Button Grid.Column="4" Content="Post to Discord" Command="{Binding PostFavouritesToDiscordCommand}"
+                    Margin="8,0,0,0" />
+        </Grid>
+
+        <TextBlock Grid.Row="2" Text="{Binding FavoritesStatus}" TextWrapping="Wrap" Margin="0,4,0,0"
+                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+
+        <Grid Grid.Row="3" RowDefinitions="Auto,*" Margin="0,8,0,0">
+            <Grid Grid.Row="0" ColumnDefinitions="70,130,*,150,26,120" Margin="6,0,0,0">
+                <TextBlock Grid.Column="0" Text="Status" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="1" Text="Added" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="2" Text="Players" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="3" Text="Map" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="4" Text="" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="5" Text="Version" FontWeight="SemiBold" />
+            </Grid>
+
+            <ListBox Grid.Row="1" Margin="0,4,0,0" ItemsSource="{Binding Favorites}"
+                     SelectedItem="{Binding SelectedFavorite}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:FavoriteRow">
+                        <Grid ColumnDefinitions="70,130,*,150,26,120" ToolTip.Tip="{Binding WatchTooltip}">
+                            <TextBlock Grid.Column="0" Text="{Binding StatusLabel}" />
+                            <TextBlock Grid.Column="1" Text="{Binding AddedLabel}" />
+                            <TextBlock Grid.Column="2" Text="{Binding PlayersLabel}"
+                                       TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
+                            <TextBlock Grid.Column="3" Text="{Binding MapName}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="4" Text="{Binding NoteBadge}" />
+                            <TextBlock Grid.Column="5" Text="{Binding VersionLabel}" TextTrimming="CharacterEllipsis" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Grid>
+
+        <Expander Grid.Row="4" Header="Saved lists" Margin="0,8,0,0">
+            <Grid Margin="8" RowDefinitions="Auto,Auto,Auto,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Column="0" Text="List:" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding SavedLists}"
+                              SelectedItem="{Binding SelectedSavedList}" MinWidth="220" Margin="6,0,0,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="core:SavedReplayList">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Grid.Column="2" Content="Delete" Command="{Binding DeleteListCommand}" Margin="6,0,0,0" />
+                    <Button Grid.Column="3" Content="Share" Command="{Binding ShareListCommand}" Margin="6,0,0,0" />
+                    <Button Grid.Column="4" Content="Post to Discord" Command="{Binding PostListToDiscordCommand}"
+                            Margin="6,0,0,0" />
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*,*,Auto,Auto" Margin="0,8,0,0">
+                    <TextBlock Grid.Column="0" Text="Name:" VerticalAlignment="Center" />
+                    <TextBox Grid.Column="1" Text="{Binding ListName}" PlaceholderText="New list name"
+                             Margin="6,0,0,0" />
+                    <TextBox Grid.Column="2" Text="{Binding ListTitle}" PlaceholderText="Title anything you want"
+                             Margin="6,0,0,0" />
+                    <Button Grid.Column="3" Content="Create list" Command="{Binding CreateListCommand}"
+                            Margin="6,0,0,0" />
+                    <Button Grid.Column="4" Content="Update selected" Command="{Binding UpdateListCommand}"
+                            Margin="6,0,0,0" />
+                </Grid>
+
+                <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,Auto,Auto" Margin="0,8,0,0">
+                    <TextBlock Grid.Column="0" Text="Add selected game to:" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding SavedLists}"
+                              SelectedItem="{Binding SelectedAddList}" MinWidth="220" Margin="6,0,0,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="core:SavedReplayList">
+                                <TextBlock Text="{Binding Name}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Grid.Column="2" Content="Add" Command="{Binding AddSelectedToListCommand}" Margin="6,0,0,0" />
+                    <Button Grid.Column="3" Content="Remove from selected" Command="{Binding RemoveSelectedFromListCommand}"
+                            Margin="6,0,0,0" />
+                </Grid>
+
+                <TextBlock Grid.Row="3" Text="{Binding ListStatus}" TextWrapping="Wrap" Margin="0,6,0,0"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+            </Grid>
+        </Expander>
+
+        <Expander Grid.Row="5" Header="Import a share" Margin="0,8,0,0">
+            <Grid Margin="8" RowDefinitions="Auto,Auto">
+                <TextBox Grid.Row="0" Text="{Binding ImportText}" AcceptsReturn="True" Height="48"
+                         PlaceholderText="Paste a share here: a Discord message, a code block, or .json share content…" />
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+                    <Button Content="Import pasted" Command="{Binding ImportPastedCommand}" />
+                    <Button Content="Import from clipboard" Command="{Binding ImportFromClipboardCommand}" />
+                    <Button Content="Import from file…" Click="OnImportFile" />
+                    <TextBlock Text="{Binding ImportStatus}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+        </Expander>
+
+        <Border Grid.Row="6" Margin="0,8,0,0" Padding="10" CornerRadius="4"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                IsVisible="{Binding HasNoteContext}">
+            <Grid RowDefinitions="Auto,Auto,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding NoteHeader}" FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis" />
+                    <Button Grid.Column="1" Content="Remove favourite" Command="{Binding ToggleFavoriteCommand}"
+                            Margin="8,0,0,0" />
+                    <Button Grid.Column="2" Content="Share note" Command="{Binding ShareNoteCommand}"
+                            Margin="6,0,0,0" />
+                    <Button Grid.Column="3" Content="Post to Discord" Command="{Binding PostNoteToDiscordCommand}"
+                            Margin="6,0,0,0" />
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="2*,*,Auto" Margin="0,6,0,0">
+                    <TextBox Grid.Column="0" Text="{Binding NoteText}" AcceptsReturn="True" Height="64"
+                             PlaceholderText="Note for this replay (private unless you choose Shared)…" />
+                    <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="4">
+                        <TextBox Text="{Binding NoteTags}" PlaceholderText="Tags: zvp, finals" />
+                        <ComboBox ItemsSource="{Binding Visibilities}" SelectedItem="{Binding NoteVisibility}"
+                                  HorizontalAlignment="Stretch" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Margin="8,0,0,0" Spacing="4">
+                        <Button Content="Save" Command="{Binding SaveNoteCommand}" />
+                        <Button Content="Delete" Command="{Binding DeleteNoteCommand}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="2" Margin="0,4,0,0" Spacing="1">
+                    <TextBlock Text="{Binding NoteMeta}" FontSize="11"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    <TextBlock Text="{Binding NoteStatus}" TextWrapping="Wrap" FontSize="11" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+
+</UserControl>

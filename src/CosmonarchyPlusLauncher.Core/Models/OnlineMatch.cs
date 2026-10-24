@@ -9,7 +9,8 @@ public sealed record OnlinePlayer(string Name, string Race, string Type, int? Ap
 /// <summary>A replay file as listed by the ReplayKraken API
 /// (<c>GET https://cosmonarchy.com/api/matches</c>), reduced to what the
 /// launcher needs. One match can carry several replay files (variants); this
-/// is the match's main replay.</summary>
+/// is the match's main replay. <paramref name="HasDesync"/> is true when the
+/// API reports a desync file for the game — the launcher highlights it red.</summary>
 public sealed record OnlineMatch(
     string MatchUuid,
     DateTimeOffset UploadedAt,
@@ -19,7 +20,8 @@ public sealed record OnlineMatch(
     string GameVersionKind,
     IReadOnlyList<OnlinePlayer> Players,
     string UploaderName,
-    string FileId)
+    string FileId,
+    bool HasDesync = false)
 {
     /// <summary>"A (Zerg) vs B (Terran)" — team boundaries are not shown.</summary>
     [JsonIgnore]

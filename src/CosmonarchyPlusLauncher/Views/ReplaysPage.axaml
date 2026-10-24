@@ -9,6 +9,12 @@
              x:Class="CosmonarchyPlusLauncher.Views.ReplaysPage"
              x:DataType="vm:ReplaysViewModel">
 
+    <UserControl.Styles>
+        <Style Selector="Grid.desync">
+            <Setter Property="Foreground" Value="#E81123" />
+        </Style>
+    </UserControl.Styles>
+
     <Grid Margin="16" RowDefinitions="Auto,Auto,*,Auto">
 
         <TextBlock Grid.Row="0" Text="Replays" FontSize="20" FontWeight="SemiBold" />
@@ -69,7 +75,9 @@
                     <Button Content="Apply" Command="{Binding ApplyListCommand}" />
                     <Button Content="Delete" Command="{Binding DeleteListCommand}" />
                     <Button Content="Share" Command="{Binding ShareListCommand}" />
-                    <TextBox Text="{Binding NewListName}" PlaceholderText="New list name" MinWidth="150" />
+                    <Button Content="Post to Discord" Command="{Binding PostListToDiscordCommand}" />
+                    <TextBox Text="{Binding NewListName}" PlaceholderText="New list name" MinWidth="120" />
+                    <TextBox Text="{Binding NewListTitle}" PlaceholderText="Title (optional)" MinWidth="140" />
                     <Button Content="Save current" Command="{Binding SaveListCommand}" />
                 </StackPanel>
 
@@ -107,7 +115,7 @@
                              SelectedItem="{Binding SelectedOgRow}">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:ReplayRow">
-                                <Grid ColumnDefinitions="28,130,*,150,70,120">
+                                <Grid ColumnDefinitions="28,130,*,150,70,120" Classes.desync="{Binding Desynced}">
                                     <TextBlock Grid.Column="0" Text="{Binding Badges}" />
                                     <TextBlock Grid.Column="1" Text="{Binding DateLabel}" />
                                     <TextBlock Grid.Column="2" Text="{Binding PlayersLabel}"
@@ -155,7 +163,7 @@
                              SelectedItem="{Binding SelectedPlusRow}">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:ReplayRow">
-                                <Grid ColumnDefinitions="28,130,*,150,70,120">
+                                <Grid ColumnDefinitions="28,130,*,150,70,120" Classes.desync="{Binding Desynced}">
                                     <TextBlock Grid.Column="0" Text="{Binding Badges}" />
                                     <TextBlock Grid.Column="1" Text="{Binding DateLabel}" />
                                     <TextBlock Grid.Column="2" Text="{Binding PlayersLabel}"
@@ -199,13 +207,15 @@
         <Border Grid.Row="3" Margin="0,8,0,0" Padding="10" CornerRadius="4"
                 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                 IsVisible="{Binding HasNoteContext}">
-            <Grid RowDefinitions="Auto,Auto,Auto">
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
+            <Grid RowDefinitions="Auto,Auto,Auto,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto">
                     <TextBlock Grid.Column="0" Text="{Binding NoteHeader}" FontWeight="SemiBold"
                                TextTrimming="CharacterEllipsis" />
                     <Button Grid.Column="1" Content="Toggle favourite" Command="{Binding ToggleFavoriteCommand}"
                             Margin="8,0,0,0" />
                     <Button Grid.Column="2" Content="Share note" Command="{Binding ShareNoteCommand}"
+                            Margin="6,0,0,0" />
+                    <Button Grid.Column="3" Content="Post to Discord" Command="{Binding PostNoteToDiscordCommand}"
                             Margin="6,0,0,0" />
                 </Grid>
 
@@ -223,7 +233,21 @@
                     </StackPanel>
                 </Grid>
 
-                <StackPanel Grid.Row="2" Margin="0,4,0,0" Spacing="1">
+                <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,Auto" Margin="0,6,0,0">
+                    <TextBlock Grid.Column="0" Text="Add to list:" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding SavedLists}"
+                              SelectedItem="{Binding SelectedAddList}" MinWidth="200" Margin="6,0,0,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="core:SavedReplayList">
+                                <TextBlock Text="{Binding Name}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Grid.Column="2" Content="Add" Command="{Binding AddNoteMatchToListCommand}"
+                            Margin="6,0,0,0" />
+                </Grid>
+
+                <StackPanel Grid.Row="3" Margin="0,4,0,0" Spacing="1">
                     <TextBlock Text="{Binding NoteMeta}" FontSize="11"
                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                     <TextBlock Text="{Binding NoteStatus}" TextWrapping="Wrap" FontSize="11" />

@@ -29,6 +29,9 @@
         <TabItem Header="Replays">
             <views:ReplaysPage />
         </TabItem>
+        <TabItem Header="Favourites">
+            <views:FavouritesPage />
+        </TabItem>
     </TabControl>
 
 </Window>

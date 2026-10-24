@@ -71,6 +71,7 @@ public partial class AccountViewModel : ViewModelBase
         try
         {
             User = await AppRuntime.Account.LoadUserAsync(_settings.AccountToken!);
+            AppRuntime.SetCurrentUser(User);
             OnPropertyChanged(nameof(DiscordDisplay));
             Status = "";
         }
@@ -90,6 +91,7 @@ public partial class AccountViewModel : ViewModelBase
         _settings.AccountToken = null;
         _settings.Save();
         User = null;
+        AppRuntime.SetCurrentUser(null);
         Status = "";
         OnPropertyChanged(nameof(IsLoggedIn));
         OnPropertyChanged(nameof(DiscordDisplay));
