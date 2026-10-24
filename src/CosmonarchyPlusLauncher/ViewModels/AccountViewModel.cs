@@ -98,6 +98,9 @@ public partial class AccountViewModel : ViewModelBase
     [RelayCommand]
     private void OpenSite() => OpenBrowser("https://cosmonarchy.com/");
 
+    [RelayCommand]
+    private void OpenDiscord() => OpenBrowser("https://discord.gg/s5SKBmY");
+
     private static void OpenBrowser(string url)
     {
         try

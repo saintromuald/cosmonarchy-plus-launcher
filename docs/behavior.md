@@ -51,15 +51,17 @@ Order of operations, each reported to the UI:
    GitHub, pick the `.snp` asset (prefer `crownlink.snp`). Skip when the file
    size matches and the asset id is cached.
 4. **Game repo.** Clone if absent (or if the origin URL differs). Otherwise:
-   fetch; skip the reset when the tree has local changes; hard-reset to the
-   selected version or `origin/main`; update submodules.
+   fetch; skip the reset when the tree has local changes; check out the repo's
+   branch and reset it to `<remote>/<branch>` (or hard-reset to the selected
+   version); update submodules.
 5. **Maps.** Clone or fetch + reset `origin/main`.
 6. **Wine.** When running under Wine, set `HKCU\Software\Wine\DllOverrides`
    `ddraw = native,builtin`.
 
-Version selection is: Latest (fetch + reset to origin/main), Current (keep the
-checked-out commit), or any specific commit from the log. Shallow history is a
-user setting; "unshallow" fetches the full log.
+Version selection is: Latest (fetch + check out the repo's branch and reset it
+to the remote tip), Current (keep the checked-out commit), or any specific
+commit from the log. The log is shown as a list; "full version log" unshallows
+a shallow clone before reading it.
 
 ## 4. Variants and launch
 
@@ -87,8 +89,7 @@ Launch:
   After launch: stay open, minimise, or close per the action-on-play setting.
 - **Linux:** `umu-run C:\Cosmonarchy\<BuildDir>\Cosmonarchy BW.exe` with
   `WINEPREFIX`, `PROTONPATH=GE-Proton`, `GAMEID=umu-cosmonarchy-<BuildDir>`,
-  `PROTON_VERB=waitforexitandrun`. When an active `HDMI-A-1` exists, disable
-  the handheld panel first so Xwayland presents a single 1080p screen.
+  `PROTON_VERB=waitforexitandrun`.
 
 ## 5. Account and social
 
@@ -102,8 +103,8 @@ Device-style login against `https://cosmonarchy.com/`:
    `{discordId, username, email, matchesPlayed, matchesWon, mmr}`.
 
 The token is stored locally (JSON settings; the original uses the registry).
-Logout discards it. The social page links to the community site in an embedded
-web view.
+Logout discards it. The Community section opens the site and the No-Frauds
+Club Discord (`https://discord.gg/s5SKBmY`) in the system browser.
 
 The backend is owned by the No-Frauds Club; this spec covers the client side
 only.

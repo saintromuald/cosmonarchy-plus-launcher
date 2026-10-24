@@ -30,6 +30,13 @@ public sealed class RepoManager : IDisposable
         return FindMatchingRemote(repo) is not null;
     }
 
+    /// <summary>True when the clone has truncated history (git shallow).</summary>
+    public bool IsShallow()
+    {
+        using var repo = new Repository(_dir);
+        return repo.Info.IsShallow == true;
+    }
+
     /// <summary>Name of the remote that points at our URL, or null.</summary>
     public string? FindMatchingRemoteName()
     {
