@@ -52,6 +52,11 @@ public sealed class AppSettings
     /// <summary>Asset id of the last-installed CrownLink release, for caching.</summary>
     public int CrownLinkAssetId { get; set; }
 
+    /// <summary>Whether the hidden Remastered launch was unlocked on this
+    /// machine (see RemasteredAccess). The unlock password is never stored;
+    /// only this flag is persisted.</summary>
+    public bool RemasteredUnlocked { get; set; }
+
     /// <summary>Optional Discord webhook URL (channel → Integrations →
     /// Webhooks) for posting shared notes/lists straight to a channel.
     /// Sharing also works without one, via the clipboard.</summary>

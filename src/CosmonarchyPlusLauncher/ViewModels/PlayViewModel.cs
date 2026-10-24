@@ -57,6 +57,11 @@ public partial class PlayViewModel : ViewModelBase
     [ObservableProperty]
     private string _status = "Select a repository and version, then install or play.";
 
+    /// <summary>True when the hidden Remastered launch is unlocked AND the
+    /// private bundle exists on this machine (see RemasteredAccess).</summary>
+    [ObservableProperty]
+    private bool _remasteredVisible;
+
     private string? _pendingDeleteId;
     private int _loadToken;
 
@@ -138,6 +143,7 @@ public partial class PlayViewModel : ViewModelBase
     [RelayCommand]
     private void Refresh()
     {
+        RemasteredVisible = RemasteredAccess.IsUnlocked(_settings);
         // Re-scan in case the install root holds checkouts the launcher has
         // not recorded yet (only happens while the list is empty).
         if (_versions.Versions.Count == 0)
@@ -150,6 +156,15 @@ public partial class PlayViewModel : ViewModelBase
             }
         }
         LoadSources();
+    }
+
+    /// <summary>Hidden Play button: launches StarCraft: Remastered through
+    /// the private bundle (Battle.net login handles Blizzard's own gate).</summary>
+    [RelayCommand]
+    private void PlayRemastered()
+    {
+        RemasteredAccess.Launch(_settings, out var status);
+        Status = status;
     }
 
     private void LoadSources()

@@ -34,6 +34,16 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _discordWebhookUrl = AppRuntime.Settings.DiscordWebhookUrl ?? "";
 
+    /// <summary>Unlock fields for the hidden Remastered launch.</summary>
+    [ObservableProperty]
+    private string _remasteredPassword = "";
+
+    [ObservableProperty]
+    private string _remasteredStatus =
+        RemasteredAccess.IsUnlocked(AppRuntime.Settings)
+            ? "Unlocked on this machine."
+            : (RemasteredAccess.IsBundleInstalled ? "Locked." : "Locked (bundle not installed).");
+
     [ObservableProperty]
     private string _communityRepo = AppRuntime.Settings.CommunityRepo;
 
@@ -56,6 +66,20 @@ public partial class SettingsViewModel : ViewModelBase
     private bool _canOpenRelease;
 
     private UpdateInfo? _update;
+
+    [RelayCommand]
+    private void UnlockRemastered()
+    {
+        if (RemasteredAccess.TryUnlock(_settings, RemasteredPassword))
+        {
+            RemasteredStatus = "Unlocked on this machine.";
+            RemasteredPassword = "";
+        }
+        else
+        {
+            RemasteredStatus = "Wrong password.";
+        }
+    }
 
     [RelayCommand]
     private void Save()
