@@ -147,34 +147,57 @@ Persisted in `~/.config/cosmonarchy-plus-launcher/settings.json` (Linux) or
 
 ## 8. Replays
 
-Three tabs:
+Tabs: **Cosmonarchy OG**, **Cosmonarchy Plus**, **Local files**.
 
-- **Local files** — every `.rep` in the game's replay directory, newest first;
-  "Play selected" switches to the vanilla build and launches straight into
-  playback.
-- **Cosmonarchy OG** and **Cosmonarchy Plus** — the ReplayKraken list behind
-  cosmonarchy.com/matches (`GET https://cosmonarchy.com/api/matches`,
-  downloads at `/api/matches/<uuid>/download/<fileId>`), split by which
-  repository published the build. A short SHA reachable from the maintainer's
-  fork is a Plus game; everything else is an OG game. Each tab has its own
-  search box (player, map, uploader, version) and its own follow-player
-  filter, so the two pools never mix. Shows the latest 20 by default; a
-  followed player or a search shows up to 100. Followed players live in the
-  settings (`followedPlayers`). The API returns every match in one ~22 MB
-  document with no paging parameters, so the mapped summaries are cached in
-  `~/.local/share/cosmonarchy-plus-launcher/matches-cache.json` and refreshed
-  on demand or after 10 minutes.
+### Online lists
 
-Watch is one click and resolves everything from the match:
+The ReplayKraken API behind cosmonarchy.com/matches
+(`GET https://cosmonarchy.com/api/matches`; downloads at
+`/api/matches/<uuid>/download/<fileId>`). A short SHA reachable from the
+maintainer's fork remote is a **Plus** game; everything else is **OG**. Each
+tab has its own search (player, map, uploader, version) and follow-player
+filter, so the pools stay separate. Latest 20 by default, up to 100 when a
+search/follow/filter is active. Followed players persist in settings
+(`followedPlayers`). The API has no paging, so the mapped summaries are cached
+for 10 minutes in
+`~/.local/share/cosmonarchy-plus-launcher/matches-cache-v2.json`.
+
+### Filters
+
+- **Race matrix** — Terran/Protoss/Zerg/Askosi/Other on both axes; a ticked
+  cell matches when two players of those races are on **opposing** teams.
+  Order-independent (`ZvT` = `TvZ`); mirrors are their own cell.
+- **Game size** — 1v1, 2v2, 3v3, 4v4, Other (FFA/uneven). Two equal teams only.
+- **Ignore observers / AI slots** — drops non-Human slots before counting teams
+  and matchups (on by default).
+- **Favourites only / Watched only / With notes only**, plus Clear filters.
+
+### Library
+
+Stored in `~/.local/share/cosmonarchy-plus-launcher/library.json`:
+
+- **Watched history** — every Watch records uuid, file id, build and time (list
+  markers `▶`, "Watched …" in the notes panel).
+- **Favourites** — star toggle (`★` in the list, persisted).
+- **Notes + tags** — per replay, with visibility **Private** (default) or
+  **Shared**. Private notes never appear in exports. Tags are attached to the
+  note and only shared with it.
+- **Saved lists** — a named snapshot of the filters plus the games they
+  matched. Apply restores the filters, Delete removes it, Share writes
+  `~/Downloads/Cosmonarchy-<name>.json` and copies the same JSON to the
+  clipboard. Exports include only shared notes/tags; the payload format is
+  `cosmonarchy-plus-launcher/replay-list`.
+
+### Watch
 
 1. Read `gameVersion` (short SHA) and `gameVersionKind` (Release/Prerelease).
-2. Resolve the SHA against the fork and upstream remotes of the matching
-   checkout, and classify it as Plus or OG.
-3. Fetch if needed, then check out that exact commit **detached** (no branch
-   pointer moves) in the channel checkout (`Release`/`Prerelease`).
+2. Resolve it against the fork and upstream remotes of that channel's checkout.
+3. Fetch if needed and check out the exact commit **detached** (no branch
+   pointer moves) in `Release`/`Prerelease`.
 4. Download the replay into `Starcraft/Maps/Replays`, stage the vanilla
    plugins, and launch `Cosmonarchy BW.exe` with the replay path as its
-   argument, which starts playback immediately.
+   argument (playback starts immediately).
 
-A running game blocks watching with a clear message. Play/Update on the Play
-page puts the tracked branch back afterwards.
+A running game blocks Watch with a clear message. Play/Update on the Play page
+puts the tracked branch back afterwards. The first launch after a build switch
+rebuilds `temp.mpq` (~1–2 minutes, black screen).
