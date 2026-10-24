@@ -109,6 +109,8 @@
                                 Command="{Binding WatchOgCommand}" IsEnabled="{Binding CanWatchOg}" />
                         <Button Content="Download only" MinWidth="120"
                                 Command="{Binding DownloadOgCommand}" IsEnabled="{Binding CanWatchOg}" />
+                        <Button Content="Show more" Command="{Binding ShowMoreOgCommand}"
+                                IsEnabled="{Binding CanShowMoreOg}" />
                     </StackPanel>
 
                     <ListBox Grid.Row="2" Margin="0,10,0,0" ItemsSource="{Binding OgMatches}"
@@ -157,6 +159,8 @@
                                 Command="{Binding WatchPlusCommand}" IsEnabled="{Binding CanWatchPlus}" />
                         <Button Content="Download only" MinWidth="120"
                                 Command="{Binding DownloadPlusCommand}" IsEnabled="{Binding CanWatchPlus}" />
+                        <Button Content="Show more" Command="{Binding ShowMorePlusCommand}"
+                                IsEnabled="{Binding CanShowMorePlus}" />
                     </StackPanel>
 
                     <ListBox Grid.Row="2" Margin="0,10,0,0" ItemsSource="{Binding PlusMatches}"
@@ -200,6 +204,84 @@
                     <TextBlock Grid.Row="2" Text="Playing a replay switches to the vanilla build (no Plus plugin) and opens the game straight into it."
                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                                Margin="0,8,0,0" TextWrapping="Wrap" />
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Following">
+                <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="0,8,0,0">
+
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*">
+                        <TextBox Grid.Column="0" Text="{Binding NewPlayer}" PlaceholderText="Player to follow"
+                                 MinWidth="130" />
+                        <Button Grid.Column="1" Content="Follow" Command="{Binding FollowPlayerCommand}"
+                                Margin="6,0,0,0" />
+                        <Button Grid.Column="2" Content="Unfollow selected" Command="{Binding UnfollowSelectedCommand}"
+                                IsEnabled="{Binding CanUnfollowSelected}" Margin="6,0,0,0" />
+                    </Grid>
+
+                    <Grid Grid.Row="1" RowDefinitions="Auto,Auto" Margin="0,8,0,0">
+                        <Grid Grid.Row="0" ColumnDefinitions="*,70,70,110" Margin="6,0,0,0">
+                            <TextBlock Grid.Column="0" Text="Player" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="1" Text="OG games" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="2" Text="Plus games" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="3" Text="Channels" FontWeight="SemiBold" />
+                        </Grid>
+                        <ListBox Grid.Row="1" Margin="0,4,0,0" ItemsSource="{Binding FollowedPlayers}"
+                                 SelectedItem="{Binding SelectedFollowed}" MaxHeight="140">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:FollowedRow">
+                                    <Grid ColumnDefinitions="*,70,70,110">
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="1" Text="{Binding OgLabel}" />
+                                        <TextBlock Grid.Column="2" Text="{Binding PlusLabel}" />
+                                        <TextBlock Grid.Column="3" Text="{Binding ChannelLabel}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+
+                    <Grid Grid.Row="2" RowDefinitions="Auto,*" Margin="0,8,0,0">
+                        <Grid Grid.Row="0" ColumnDefinitions="28,80,130,*,150,70,120" Margin="6,0,0,0">
+                            <TextBlock Grid.Column="0" Text="" />
+                            <TextBlock Grid.Column="1" Text="Channel" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="2" Text="Date" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="3" Text="Players" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="4" Text="Map" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="5" Text="Length" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="6" Text="Version" FontWeight="SemiBold" />
+                        </Grid>
+                        <ListBox Grid.Row="1" Margin="0,4,0,0" ItemsSource="{Binding FollowedMatches}"
+                                 SelectedItem="{Binding SelectedFollowedMatch}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:FollowedReplayRow">
+                                    <Grid ColumnDefinitions="28,80,130,*,150,70,120"
+                                          Classes.desync="{Binding Desynced}">
+                                        <TextBlock Grid.Column="0" Text="{Binding Badges}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding ChannelLabel}" />
+                                        <TextBlock Grid.Column="2" Text="{Binding DateLabel}" />
+                                        <TextBlock Grid.Column="3" Text="{Binding PlayersLabel}"
+                                                   TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
+                                        <TextBlock Grid.Column="4" Text="{Binding MapName}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="5" Text="{Binding DurationLabel}" />
+                                        <TextBlock Grid.Column="6" Text="{Binding VersionLabel}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+
+                    <StackPanel Grid.Row="3" Margin="0,8,0,0" Spacing="2">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="Watch selected" MinWidth="130" Command="{Binding WatchFollowedCommand}"
+                                    IsEnabled="{Binding CanWatchFollowed}" />
+                            <Button Content="Download only" MinWidth="120" Command="{Binding DownloadFollowedCommand}"
+                                    IsEnabled="{Binding CanWatchFollowed}" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding FollowedStatus}" TextWrapping="Wrap" />
+                    </StackPanel>
                 </Grid>
             </TabItem>
         </TabControl>

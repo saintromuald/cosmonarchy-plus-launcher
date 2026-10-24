@@ -165,8 +165,9 @@ Persisted in `~/.config/cosmonarchy-plus-launcher/settings.json` (Linux) or
 
 ## 8. Replays
 
-Tabs: **Cosmonarchy OG**, **Cosmonarchy Plus**, **Local files**, plus
-**Favourites** (the local library) and **Community** (the public share board).
+Tabs: **Cosmonarchy OG**, **Cosmonarchy Plus**, **Local files**,
+**Following**, plus **Favourites** (the local library) and **Community** (the
+public share board).
 
 ### Online lists
 
@@ -176,9 +177,10 @@ The ReplayKraken API behind cosmonarchy.com/matches
 maintainer's fork remote is a **Plus** game; everything else is **OG**. Each
 tab has its own search (player, map, uploader, version) and follow-player
 filter, so the pools stay separate. Latest 20 by default, up to 100 when a
-search/follow/filter is active. Followed players persist in settings
-(`followedPlayers`). The API has no paging, so the mapped summaries are cached
-for 10 minutes in
+search/follow/filter is active; a **Show more** button grows the list further
+(200 at a time) until everything is shown. Followed players persist in
+settings (`followedPlayers`). The API has no paging, so the mapped summaries
+are cached for 10 minutes in
 `~/.local/share/cosmonarchy-plus-launcher/matches-cache-v3.json`.
 
 **Desyncs** — the API flags each replay with `hasDesyncFile`. A match whose
@@ -222,6 +224,15 @@ already-watched ones, note badges, and red desync rows. Selecting one opens
 the same note editor as the Replays page (text, tags, visibility,
 save/delete, remove favourite). Favourites with no snapshot are enriched
 from the online list when it refreshes.
+
+### Following tab
+
+Everyone followed, with a per-channel split: each player lists their OG and
+Plus game counts and a "OG / Plus / OG + Plus / no games" marker. Selecting a
+player shows all of their games from **both channels** in one list, each row
+badged with its channel, with the usual favourite/watched/note/desync badges,
+Watch and Download buttons, and the shared notes panel. Follow/unfollow also
+work from this tab.
 
 ### Share and import
 

@@ -19,8 +19,52 @@ public sealed class AccountService
     {
         var json = await GetJsonAsync("/api/auth", ct);
         var requestId = json.GetProperty("loginRequestId").GetString() ?? "";
-        var authUrl = json.GetProperty("authUrl").GetString() ?? "";
+        var authUrl = FixAuthUrl(json.GetProperty("authUrl").GetString() ?? "");
         return new LoginRequest(requestId, authUrl);
+    }
+
+    /// <summary>The backend sometimes points Discord at its staging domain
+    /// (stars.veeq7.com), which the Discord app registration no longer
+    /// accepts — Discord rejects it with "Invalid OAuth2 redirect_uri". Both
+    /// domains serve the same backend (the callback is identical), so rewrite
+    /// the redirect to the production domain. The state (which ties the
+    /// browser callback to the launcher's poll) is left untouched.</summary>
+    internal static string FixAuthUrl(string authUrl)
+    {
+        try
+        {
+            var builder = new UriBuilder(authUrl);
+            var isDiscord = builder.Host.Equals("discord.com", StringComparison.OrdinalIgnoreCase) ||
+                            builder.Host.Equals("discordapp.com", StringComparison.OrdinalIgnoreCase);
+            if (!isDiscord)
+                return authUrl;
+
+            var parts = builder.Query.TrimStart('?')
+                .Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .ToList();
+            for (var i = 0; i < parts.Count; i++)
+            {
+                var pair = parts[i].Split('=', 2);
+                if (pair.Length != 2 || !pair[0].Equals("redirect_uri", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var redirect = new Uri(Uri.UnescapeDataString(pair[1]));
+                var host = redirect.Host;
+                if (host.Equals("cosmonarchy.com", StringComparison.OrdinalIgnoreCase) ||
+                    host.Equals("www.cosmonarchy.com", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                pair[1] = Uri.EscapeDataString(
+                    new UriBuilder(redirect) { Host = "cosmonarchy.com", Port = -1 }.ToString());
+                parts[i] = string.Join('=', pair);
+            }
+
+            builder.Port = -1; // don't render the default ports UriBuilder infers
+            builder.Query = string.Join('&', parts);
+            return builder.ToString();
+        }
+        catch (UriFormatException)
+        {
+            return authUrl; // not our URL to fix: open it as-is
+        }
     }
 
     public async Task<string?> PollLoginAsync(string requestId, TimeSpan pollInterval, CancellationToken ct = default)
