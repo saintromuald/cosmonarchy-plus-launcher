@@ -39,6 +39,9 @@ public partial class SettingsViewModel : ViewModelBase
     private string _remasteredPassword = "";
 
     [ObservableProperty]
+    private string _remasteredBundleUrl = AppRuntime.Settings.RemasteredBundleUrl ?? "";
+
+    [ObservableProperty]
     private string _remasteredStatus =
         RemasteredAccess.IsUnlocked(AppRuntime.Settings)
             ? "Unlocked on this machine."
@@ -70,15 +73,9 @@ public partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private void UnlockRemastered()
     {
-        if (RemasteredAccess.TryUnlock(_settings, RemasteredPassword))
-        {
-            RemasteredStatus = "Unlocked on this machine.";
+        RemasteredStatus = RemasteredAccess.TryUnlock(_settings, RemasteredPassword);
+        if (!RemasteredStatus.StartsWith("Wrong password", StringComparison.Ordinal))
             RemasteredPassword = "";
-        }
-        else
-        {
-            RemasteredStatus = "Wrong password.";
-        }
     }
 
     [RelayCommand]
@@ -92,6 +89,9 @@ public partial class SettingsViewModel : ViewModelBase
             ? null
             : DiscordWebhookUrl.Trim();
         _settings.CommunityRepo = CommunityRepo.Trim();
+        _settings.RemasteredBundleUrl = string.IsNullOrWhiteSpace(RemasteredBundleUrl)
+            ? null
+            : RemasteredBundleUrl.Trim();
         _settings.GitHubToken = string.IsNullOrWhiteSpace(GithubToken)
             ? null
             : GithubToken.Trim();
