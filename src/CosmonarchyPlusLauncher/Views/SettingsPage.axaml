@@ -55,7 +55,7 @@
                 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                 CornerRadius="4">
             <StackPanel Spacing="6">
-                <TextBlock Text="Remastered access" FontWeight="SemiBold" />
+                <TextBlock Text="Access" FontWeight="SemiBold" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBox Text="{Binding RemasteredPassword}" PasswordChar="•"
                              Watermark="Unlock password" MinWidth="220" />

@@ -126,10 +126,8 @@
                 CornerRadius="4"
                 IsVisible="{Binding ShowRemasteredUnlock}">
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBlock Text="Remastered access" VerticalAlignment="Center"
-                           FontWeight="SemiBold" />
                 <TextBox Text="{Binding RemasteredPassword}" PasswordChar="•"
-                         Watermark="Unlock password" MinWidth="200" />
+                         Watermark="Access password" MinWidth="200" />
                 <Button Content="Unlock" Command="{Binding UnlockRemasteredCommand}"
                         MinWidth="90" />
                 <TextBlock Text="{Binding RemasteredStatus}" VerticalAlignment="Center"
