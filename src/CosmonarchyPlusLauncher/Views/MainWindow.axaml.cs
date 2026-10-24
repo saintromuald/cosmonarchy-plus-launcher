@@ -1,13 +1,16 @@
 using Avalonia.Controls;
-using Avalonia.Threading;
 using CosmonarchyPlusLauncher.Services;
 
 namespace CosmonarchyPlusLauncher.Views;
 
 public partial class MainWindow : Window
 {
-    /// <summary>True when running under the Hyprland compositor, which
-    /// ignores client maximize requests and only honors real fullscreen.</summary>
+    /// <summary>True when running under the Hyprland compositor. Hyprland
+    /// ignores client maximize requests, so a window rule in the Hyprland
+    /// config owns the launcher's fullscreen state instead (see the
+    /// `CosmonarchyPlusLauncher` window rule); the app must not fight it
+    /// with repeated state requests, which lose the race and leave the
+    /// window tiled at quarter size.</summary>
     private static bool IsHyprland =>
         Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP")?.Contains("Hyprland", StringComparison.OrdinalIgnoreCase) == true
         || Environment.GetEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE") is { Length: > 0 };
@@ -15,31 +18,13 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        // Fill the screen on launch. Hyprland ignores client maximize
-        // requests (Omarchy suppresses the maximize event), so it gets a
-        // real fullscreen request; other desktops get maximized. The
-        // Wayland backend has no surface proxy yet at Opened time and
-        // compositors drop state changes made while the window is still
-        // being mapped, so the request is re-issued a few times after open
-        // until it lands.
         Opened += (_, _) =>
         {
             AppRuntime.Clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-            ApplyStartupWindowState(attempts: 8);
+            // Non-Hyprland desktops get a plain maximize; Hyprland's window
+            // rule applies real fullscreen without any client requests.
+            if (!IsHyprland)
+                WindowState = WindowState.Maximized;
         };
-
-        void ApplyStartupWindowState(int attempts)
-        {
-            if (attempts <= 0)
-                return;
-            WindowState = IsHyprland ? WindowState.FullScreen : WindowState.Maximized;
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-            timer.Tick += (_, _) =>
-            {
-                timer.Stop();
-                ApplyStartupWindowState(attempts - 1);
-            };
-            timer.Start();
-        }
     }
 }
