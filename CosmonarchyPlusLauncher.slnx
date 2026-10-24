@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CosmonarchyPlusLauncher.Core/CosmonarchyPlusLauncher.Core.csproj" />
+    <Project Path="src/CosmonarchyPlusLauncher/CosmonarchyPlusLauncher.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CosmonarchyPlusLauncher.Core.Tests/CosmonarchyPlusLauncher.Core.Tests.csproj" />
+  </Folder>
+</Solution>
