@@ -57,6 +57,10 @@ public sealed class AppSettings
     /// only this flag is persisted.</summary>
     public bool RemasteredUnlocked { get; set; }
 
+    /// <summary>Override URL (or local path) of the encrypted Remastered
+    /// bundle. Null/empty = the built-in default.</summary>
+    public string? RemasteredBundleUrl { get; set; }
+
     /// <summary>Optional Discord webhook URL (channel → Integrations →
     /// Webhooks) for posting shared notes/lists straight to a channel.
     /// Sharing also works without one, via the clipboard.</summary>

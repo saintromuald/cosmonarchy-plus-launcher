@@ -62,6 +62,8 @@
                             MinWidth="100" />
                     <TextBlock Text="{Binding RemasteredStatus}" VerticalAlignment="Center" />
                 </StackPanel>
+                <TextBox Text="{Binding RemasteredBundleUrl}" FontSize="12"
+                         Watermark="Bundle URL or local path (blank = default)" />
             </StackPanel>
         </Border>
 
