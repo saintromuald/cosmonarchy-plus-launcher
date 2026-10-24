@@ -58,8 +58,12 @@ public sealed class AppSettings
     public bool RemasteredUnlocked { get; set; }
 
     /// <summary>Override URL (or local path) of the encrypted Remastered
-    /// bundle. Null/empty = the built-in default.</summary>
+    /// bundle. Null/empty = resolve the latest GitHub release asset.</summary>
     public string? RemasteredBundleUrl { get; set; }
+
+    /// <summary>Bundle channel: "release" (stable) or "prerelease".
+    /// The launcher always fetches the newest asset of the chosen channel.</summary>
+    public string RemasteredChannel { get; set; } = "release";
 
     /// <summary>Optional Discord webhook URL (channel → Integrations →
     /// Webhooks) for posting shared notes/lists straight to a channel.

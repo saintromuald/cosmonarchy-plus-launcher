@@ -41,6 +41,12 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _remasteredBundleUrl = AppRuntime.Settings.RemasteredBundleUrl ?? "";
 
+    public IReadOnlyList<string> RemasteredChannels { get; } =
+        [RemasteredAccess.ChannelRelease, RemasteredAccess.ChannelPrerelease];
+
+    [ObservableProperty]
+    private string _remasteredChannel = AppRuntime.Settings.RemasteredChannel;
+
     [ObservableProperty]
     private string _remasteredStatus =
         RemasteredAccess.IsUnlocked(AppRuntime.Settings)
@@ -89,6 +95,7 @@ public partial class SettingsViewModel : ViewModelBase
             ? null
             : DiscordWebhookUrl.Trim();
         _settings.CommunityRepo = CommunityRepo.Trim();
+        _settings.RemasteredChannel = RemasteredChannel;
         _settings.RemasteredBundleUrl = string.IsNullOrWhiteSpace(RemasteredBundleUrl)
             ? null
             : RemasteredBundleUrl.Trim();

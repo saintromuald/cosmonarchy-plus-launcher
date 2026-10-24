@@ -62,8 +62,14 @@
                             MinWidth="100" />
                     <TextBlock Text="{Binding RemasteredStatus}" VerticalAlignment="Center" />
                 </StackPanel>
-                <TextBox Text="{Binding RemasteredBundleUrl}" FontSize="12"
-                         Watermark="Bundle URL or local path (blank = default)" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="Channel" VerticalAlignment="Center" FontSize="12" />
+                    <ComboBox ItemsSource="{Binding RemasteredChannels}"
+                              SelectedItem="{Binding RemasteredChannel}" MinWidth="120"
+                              FontSize="12" />
+                    <TextBox Text="{Binding RemasteredBundleUrl}" FontSize="12"
+                             Watermark="Bundle URL or local path (blank = latest release)" />
+                </StackPanel>
             </StackPanel>
         </Border>
 
