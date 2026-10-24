@@ -66,10 +66,11 @@ public sealed class InstallService
     /// <summary>Install/update this version: ensure the shared base, then
     /// bring the version's own checkout to its tracked branch tip or its
     /// pinned commit.</summary>
-    public async Task InstallAsync(IProgress<string>? progress = null, CancellationToken ct = default)
+    public async Task InstallAsync(IProgress<string>? progress = null, CancellationToken ct = default,
+        bool forceCheckout = false)
     {
         await EnsureBaseAsync(progress, ct);
-        await EnsureVersionAsync(progress, ct);
+        await EnsureVersionAsync(progress, ct, forceCheckout);
         HealTempMpq(progress);
     }
 
@@ -87,9 +88,10 @@ public sealed class InstallService
     /// <summary>Copy a replay into the game's replay directory and launch
     /// into it. Replays are played on the vanilla build (the Plus plugin is
     /// unstaged and rollback disarmed), matching how they were recorded.</summary>
-    public async Task PlayReplayAsync(string replayPath, IProgress<string>? progress = null, CancellationToken ct = default)
+    public async Task PlayReplayAsync(string replayPath, IProgress<string>? progress = null,
+        CancellationToken ct = default, bool forceCheckout = false, bool launch = true)
     {
-        await InstallAsync(progress, ct);
+        await InstallAsync(progress, ct, forceCheckout);
         var stager = new PluginStager(RepoDir, StageDir,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         stager.Apply(Variant.Original, null);
@@ -101,9 +103,15 @@ public sealed class InstallService
             File.Copy(replayPath, destination, overwrite: true);
         }
 
+        if (!launch)
+        {
+            progress?.Report($"Replay ready: {Path.GetFileName(destination)}");
+            return;
+        }
+
         progress?.Report($"Launching replay {Path.GetFileName(replayPath)}");
         EnsureFullscreenDisplay(progress);
-        await LaunchAsync(ct);
+        await LaunchAsync(ct, destination);
     }
 
     private async Task EnsureBaseAsync(IProgress<string>? progress, CancellationToken ct)
@@ -115,13 +123,14 @@ public sealed class InstallService
         FixWineRegistry(progress);
     }
 
-    private async Task EnsureVersionAsync(IProgress<string>? progress, CancellationToken ct)
+    private async Task EnsureVersionAsync(IProgress<string>? progress, CancellationToken ct,
+        bool forceCheckout = false)
     {
         using var repo = new RepoManager(RepoDir, _repo.Url);
         if (repo.IsInstalled())
         {
             var remoteName = repo.EnsureRemoteName();
-            if (repo.HasLocalChanges())
+            if (!forceCheckout && repo.HasLocalChanges())
             {
                 // Never clobber local edits (hotloader work, tweaked
                 // plugins): launch or play with the checkout as it is.
@@ -137,7 +146,7 @@ public sealed class InstallService
             }
             else
             {
-                repo.ResetTo(_version.PinnedSha!, progress);
+                repo.CheckoutCommit(_version.PinnedSha!, progress);
             }
         }
         else
@@ -146,7 +155,7 @@ public sealed class InstallService
                 Directory.Delete(RepoDir, recursive: true);
             repo.Clone(progress);
             if (!_version.TracksBranch)
-                repo.ResetTo(_version.PinnedSha!, progress);
+                repo.CheckoutCommit(_version.PinnedSha!, progress);
         }
         await Task.CompletedTask; // git operations are sync in LibGit2Sharp
     }
@@ -294,7 +303,7 @@ public sealed class InstallService
         }
     }
 
-    private async Task LaunchAsync(CancellationToken ct)
+    private async Task LaunchAsync(CancellationToken ct, string? replayPath = null)
     {
         if (OperatingSystem.IsWindows())
         {
@@ -303,20 +312,22 @@ public sealed class InstallService
                 WorkingDirectory = RepoDir,
                 UseShellExecute = true,
             };
+            if (replayPath is not null)
+                psi.ArgumentList.Add(replayPath);
             Process.Start(psi);
             await WaitForStarcraftWindowAsync(ct);
             return;
         }
 
+        var exe = $@"C:\Cosmonarchy\{_version.Dir.Replace('/', '\\')}\Cosmonarchy BW.exe";
         var startInfo = new ProcessStartInfo("umu-run")
         {
             WorkingDirectory = RepoDir,
             UseShellExecute = false,
-            ArgumentList =
-            {
-                $@"C:\Cosmonarchy\{_version.Dir.Replace('/', '\\')}\Cosmonarchy BW.exe",
-            },
+            ArgumentList = { exe },
         };
+        if (replayPath is not null)
+            startInfo.ArgumentList.Add(ToWindowsPath(replayPath));
         startInfo.Environment["WINEPREFIX"] = Path.Combine(_settings.LinuxPrefixRoot, "prefix");
         startInfo.Environment["PROTONPATH"] = "GE-Proton";
         startInfo.Environment["GAMEID"] = $"umu-cosmonarchy-{_version.Id}";
@@ -325,6 +336,17 @@ public sealed class InstallService
         // Return once the game process is up: the launcher stays usable to
         // switch versions while the game runs.
         await Task.CompletedTask;
+    }
+
+    /// <summary>Map a file inside the Wine prefix's drive_c to its Windows
+    /// path, so the game can be handed a replay argument.</summary>
+    private string ToWindowsPath(string path)
+    {
+        var driveC = Path.Combine(_settings.LinuxPrefixRoot, "prefix", "drive_c");
+        var relative = Path.GetRelativePath(driveC, path);
+        if (Path.IsPathRooted(relative) || relative.StartsWith("..", StringComparison.Ordinal))
+            return path;
+        return "C:\\" + relative.Replace('/', '\\');
     }
 
     private static async Task WaitForStarcraftWindowAsync(CancellationToken ct)

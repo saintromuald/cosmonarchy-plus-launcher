@@ -22,6 +22,8 @@ public static class Program
                 "--tmp" => await TempAsync(),
                 "--mpq" => MpqAsync(),
                 "--matches" => await MatchesAsync(args.Skip(1).ToArray()),
+                "--resolve" => await ResolveBuildAsync(args.Skip(1).ToArray()),
+                "--watch" => await WatchMatchAsync(args.Skip(1).ToArray()),
                 _ => Usage(),
             };
         }
@@ -58,8 +60,59 @@ public static class Program
 
     private static int Usage()
     {
-        Console.Error.WriteLine("usage: Smoke [--live|--tmp|--mpq|--matches [player]]");
+        Console.Error.WriteLine("usage: Smoke [--live|--tmp|--mpq|--matches [player]|--resolve <sha> [kind]]");
         return 2;
+    }
+
+    /// <summary>Full watch pipeline for one online match (optionally without
+    /// launching, to verify the build/download/staging part):
+    /// <c>Smoke --watch &lt;matchUuid&gt; [--no-launch]</c>.</summary>
+    private static async Task<int> WatchMatchAsync(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            Console.Error.WriteLine("usage: Smoke --watch <matchUuid> [--no-launch]");
+            return 2;
+        }
+        var launch = !args.Contains("--no-launch");
+        var settings = AppSettings.Load();
+        var kraken = new ReplayKrakenService();
+        var all = await kraken.GetMatchesAsync();
+        var match = all.FirstOrDefault(m => m.MatchUuid.Equals(args[0], StringComparison.OrdinalIgnoreCase))
+                    ?? throw new InvalidOperationException($"Match {args[0]} not in the current list.");
+        Console.WriteLine($"match: {match.PlayersLabel} on {match.MapName}, {match.VersionLabel}");
+        var progress = new Progress<string>(s => Console.WriteLine($"  {s}"));
+        var service = new ReplayWatchService(settings, kraken);
+        var build = await service.WatchAsync(match, progress, launch: launch);
+        Console.WriteLine($"channel={build.Channel} dir={build.Dir} sha={build.FullSha[..8]} replay={match.FileName}");
+        Console.WriteLine(launch ? "WATCH SMOKE OK" : "WATCH PREPARE SMOKE OK");
+        return 0;
+    }
+
+    /// <summary>Resolve a replay's short SHA to a build and check it out, the
+    /// way one-click watching does (no download, no launch).
+    /// <c>Smoke --resolve &lt;sha&gt; [Release|Prerelease]</c>.</summary>
+    private static async Task<int> ResolveBuildAsync(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            Console.Error.WriteLine("usage: Smoke --resolve <sha> [Release|Prerelease]");
+            return 2;
+        }
+        var sha = args[0];
+        var kind = args.Length > 1 ? args[1] : "Release";
+        var settings = AppSettings.Load();
+        var match = new OnlineMatch(
+            "smoke", DateTimeOffset.UtcNow, "Smoke", TimeSpan.Zero, sha, kind, [], "smoke", "smoke");
+        var progress = new Progress<string>(s => Console.WriteLine($"  {s}"));
+        var build = await new ReplayBuildResolver(settings).ResolveAsync(match, progress);
+        Console.WriteLine($"channel={build.Channel} repo={build.Repo.Id} dir={build.Dir} sha={build.FullSha}");
+
+        using var repo = new RepoManager(Path.Combine(settings.RootPath, build.Dir), build.Repo.Url);
+        repo.CheckoutCommit(build.FullSha, progress);
+        Console.WriteLine($"head={repo.NewestCommit()?.Sha} ({repo.NewestCommit()?.Message})");
+        Console.WriteLine("RESOLVE SMOKE OK");
+        return 0;
     }
 
     private static IProgress<string> Reporter(string tag) =>
