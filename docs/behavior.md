@@ -14,6 +14,9 @@ The launcher manages git repositories:
 | release | Game build (default) | `https://github.com/saintromuald/cosmonarchy-bw-release.git` |
 | prerelease | Game build | `https://gitlab.com/the-no-frauds-club/cosmonarchy-bw-prerelease.git` |
 | release-upstream | Game build fallback | `https://gitlab.com/the-no-frauds-club/cosmonarchy-bw-release.git` |
+| original | Original (pre-split) game build; replay fallback for games the original client recorded without a channel | `https://gitlab.com/the-no-frauds-club/cosmonarchy.git` |
+| old-release | 2023 old release archive (backdate source) | `https://gitlab.com/the-no-frauds-club/release/Cosmonarchy-old-1.git` |
+| nightly | 2023 nightly archive (backdate source) | `https://gitlab.com/Pr0nogo3/specialbus.git` |
 | luci-* | Unofficial mirrors (hidden unless enabled) | gitea.aromavir.us/lucifirius |
 | cmbw-root | Maps | `https://gitlab.com/the-no-frauds-club/cmbw-root.git` |
 | plus | Plugin (staged as `zz-cosmo-plus.qdp`) | `https://github.com/saintromuald/cosmonarchy-plus.git` |
@@ -38,6 +41,8 @@ directory inside `~/Games/cosmonarchy/prefix`.
     CrownLink.snp       network plugin
   Release/              legacy game checkout (adopted as a version)
   Prerelease/           legacy game checkout (adopted as a version)
+  Original/             original-repo checkout used for replay playback of
+                        games recorded without a channel (never a Play version)
   versions/
     <id>/               a game checkout installed by this launcher
       Cosmonarchy BW.exe, plugins/, mpq/, temp.mpq
@@ -278,6 +283,16 @@ name when they are logged in on the Account page, "anonymous" otherwise.
 4. Download the replay into `Starcraft/Maps/Replays`, stage the vanilla
    plugins, and launch `Cosmonarchy BW.exe` with the replay path as its
    argument (playback starts immediately).
+
+Games the original client recorded have no `gameVersionKind`. For those, Watch
+tries the ordinary Release/Prerelease checkouts first (their histories share
+most of the original commits, so no extra download is usually needed), then the
+**Original** checkout: a dedicated `<RootPath>/Original` clone of the original
+repository, with the Release, Prerelease, old-release, and nightly sources as
+additional remotes — the same set of sources Fraud Launcher 2 can backdate to.
+The maintainer's own games are still recognised (and labelled Plus) when the
+commit is reachable from a fork remote. A version that no published source has
+fails with a clear "no longer published" message.
 
 A running game blocks Watch with a clear message. Play/Update on the Play page
 puts the tracked branch back afterwards. The first launch after a build switch

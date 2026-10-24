@@ -1021,4 +1021,71 @@ public class CoreTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("SomeFutureKind")]
+    public void ReplayBuildResolver_original_kind_means_no_usable_channel(string kind) =>
+        Assert.True(ReplayBuildResolver.IsOriginal(kind));
+
+    [Theory]
+    [InlineData("Release")]
+    [InlineData("release")]
+    [InlineData("Prerelease")]
+    [InlineData("PRERELEASE")]
+    public void ReplayBuildResolver_known_kinds_are_not_original(string kind) =>
+        Assert.False(ReplayBuildResolver.IsOriginal(kind));
+
+    [Fact]
+    public void ReplayBuildResolver_prerelease_matches_case_insensitively()
+    {
+        Assert.True(ReplayBuildResolver.IsPrerelease("Prerelease"));
+        Assert.True(ReplayBuildResolver.IsPrerelease("prerelease"));
+        Assert.False(ReplayBuildResolver.IsPrerelease("Release"));
+        Assert.False(ReplayBuildResolver.IsPrerelease(""));
+    }
+
+    [Fact]
+    public void RepoCatalog_carries_every_original_source()
+    {
+        // The sources Fraud Launcher 2's backdate list can reach: the
+        // original (pre-split) repository plus its forebears.
+        var original = ReplayBuildResolver.OriginalRepo();
+        Assert.NotNull(original);
+        Assert.Equal("https://gitlab.com/the-no-frauds-club/cosmonarchy.git", original.Url);
+        Assert.Equal("master", original.Branch);
+        Assert.Equal(RepoKind.Game, original.Kind);
+
+        var oldRelease = ReplayBuildResolver.OldReleaseRepo();
+        Assert.NotNull(oldRelease);
+        Assert.Equal("https://gitlab.com/the-no-frauds-club/release/Cosmonarchy-old-1.git", oldRelease.Url);
+        Assert.Equal("master", oldRelease.Branch);
+
+        var nightly = ReplayBuildResolver.NightlyRepo();
+        Assert.NotNull(nightly);
+        Assert.Equal("https://gitlab.com/Pr0nogo3/specialbus.git", nightly.Url);
+
+        // And they are all offered on the Play page like the other official repos.
+        Assert.Contains(RepoCatalog.Official, r => r.Id == "original");
+        Assert.Contains(RepoCatalog.Official, r => r.Id == "old-release");
+        Assert.Contains(RepoCatalog.Official, r => r.Id == "nightly");
+    }
+
+    [Fact]
+    public void Version_labels_drop_the_empty_original_kind()
+    {
+        var match = new OnlineMatch(
+            "u", DateTimeOffset.UtcNow, "Map", TimeSpan.FromMinutes(5),
+            "daf2a27", "", [], "uploader", "file");
+        Assert.Equal("daf2a27", match.VersionLabel);
+
+        var snapshot = new ReplaySnapshot { GameVersion = "daf2a27", GameVersionKind = "" };
+        Assert.Equal("daf2a27", snapshot.VersionLabel);
+
+        var prerelease = new OnlineMatch(
+            "u", DateTimeOffset.UtcNow, "Map", TimeSpan.FromMinutes(5),
+            "daf2a27", "Prerelease", [], "uploader", "file");
+        Assert.Equal("daf2a27 (Prerelease)", prerelease.VersionLabel);
+    }
 }
