@@ -75,7 +75,7 @@ jobs:
           set -eux
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
-          ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir CosmonarchyPlusLauncher-x86_64.AppImage
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir CosmonarchyPlusLauncher-x86_64.AppImage
       - uses: actions/upload-artifact@v4
         with:
           name: appimage
@@ -97,10 +97,10 @@ jobs:
           name: win-x64
           path: dist
       - uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: appimage
           path: dist
-          if-no-files-found: ignore
       - name: Zip payloads
         run: |
           cd dist
