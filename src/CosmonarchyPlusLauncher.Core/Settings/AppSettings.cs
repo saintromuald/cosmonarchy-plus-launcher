@@ -45,6 +45,13 @@ public sealed class AppSettings
     // lives here to keep the dependency direction clean.
     public const string DefaultRepoId = "release";
 
+    /// <summary>The file this instance was loaded from (or last saved to).
+    /// Save() writes back here unless a path is passed explicitly, so callers
+    /// that build settings in memory (tests, smoke runs) never overwrite the
+    /// user's real settings file.</summary>
+    [JsonIgnore]
+    public string? FilePath { get; set; }
+
     public static AppSettings Load(string? path = null)
     {
         path ??= PlatformDefaults.SettingsFile();
@@ -52,19 +59,22 @@ public sealed class AppSettings
         {
             try
             {
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path)) ?? new();
+                var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path)) ?? new();
+                loaded.FilePath = path;
+                return loaded;
             }
             catch (JsonException)
             {
                 // Corrupt settings: keep the file, start fresh in memory.
             }
         }
-        return new AppSettings();
+        return new AppSettings { FilePath = path };
     }
 
     public void Save(string? path = null)
     {
-        path ??= PlatformDefaults.SettingsFile();
+        path ??= FilePath ?? PlatformDefaults.SettingsFile();
+        FilePath = path;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(this, new JsonSerializerOptions
         {

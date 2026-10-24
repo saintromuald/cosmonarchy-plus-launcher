@@ -141,6 +141,10 @@ public static class Program
 
             var settings = new AppSettings
             {
+                // Keep the throwaway run out of the user's real settings file:
+                // InstallService.Save() writes back to whatever file the
+                // settings came from, and the default would be ~/.config.
+                FilePath = Path.Combine(tmp, "settings.json"),
                 RootPath = installRoot,
                 LinuxPrefixRoot = prefixRoot,
             };

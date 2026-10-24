@@ -63,6 +63,28 @@ public class CoreTests
     }
 
     [Fact]
+    public void Settings_save_without_a_path_writes_back_to_the_loaded_file()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-test-{Guid.NewGuid():N}.json");
+        try
+        {
+            new AppSettings { FilePath = path, RootPath = "/tmp/a" }.Save();
+
+            var loaded = AppSettings.Load(path);
+            Assert.Equal(path, loaded.FilePath);
+
+            loaded.RootPath = "/tmp/b";
+            loaded.Save();
+
+            Assert.Equal("/tmp/b", AppSettings.Load(path).RootPath);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void PluginStager_original_variant_removes_plus_and_disarms()
     {
         var tmp = Path.Combine(Path.GetTempPath(), $"cpl-stage-{Guid.NewGuid():N}");
