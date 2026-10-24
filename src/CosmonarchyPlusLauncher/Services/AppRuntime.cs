@@ -10,7 +10,17 @@ public static class AppRuntime
 {
     public static AppSettings Settings { get; } = AppSettings.Load();
 
-    public static InstallService CreateInstaller(RepoEntry repo) => new(Settings, repo);
+    public static VersionManager Versions { get; } = new(Settings);
 
     public static AccountService Account { get; } = new();
+
+    static AppRuntime()
+    {
+        // Adopt any existing checkouts (legacy Release/Prerelease, leftover
+        // versions/*) the first time the new version list is seen.
+        Versions.AdoptExistingInstallations();
+    }
+
+    public static InstallService CreateInstaller(RepoEntry repo, GameVersion version) =>
+        new(Settings, repo, version);
 }

@@ -15,6 +15,8 @@
 ## M1 — UI
 
 - [x] Play page: repo picker, version log, install/play buttons, progress
+- [x] Multiple installed versions: install any number side by side (each in
+  its own checkout), pin or track, switch with one click, update, delete
 - [x] Settings page: root path, variant, role, action-on-play, log depth, updates
 - [x] Account page: login flow, profile stats, community link
 - [x] Replays page: list + open folder (deep-link launch in M4)

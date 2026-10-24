@@ -21,6 +21,7 @@ public static class Program
                 "--live" => await LiveAsync(),
                 "--tmp" => await TempAsync(),
                 "--mpq" => MpqAsync(),
+                "--matches" => await MatchesAsync(args.Skip(1).ToArray()),
                 _ => Usage(),
             };
         }
@@ -57,12 +58,37 @@ public static class Program
 
     private static int Usage()
     {
-        Console.Error.WriteLine("usage: Smoke [--live|--tmp]");
+        Console.Error.WriteLine("usage: Smoke [--live|--tmp|--mpq|--matches [player]]");
         return 2;
     }
 
     private static IProgress<string> Reporter(string tag) =>
         new Progress<string>(s => Console.WriteLine($"[{tag}] {s}"));
+
+    /// <summary>Live check of the ReplayKraken list (the Replays page's
+    /// "Online games" tab): fetch, map, cache, then show the latest 20 and
+    /// optionally one player's games.</summary>
+    private static async Task<int> MatchesAsync(string[] args)
+    {
+        var service = new ReplayKrakenService();
+        var progress = new Progress<string>(s => Console.WriteLine(s));
+        var all = await service.GetMatchesAsync(force: true, progress);
+        Console.WriteLine($"total matches: {all.Count}");
+        var latest = ReplayKrakenService.Filter(all, 20);
+        Console.WriteLine($"latest {latest.Count}:");
+        foreach (var m in latest.Take(5))
+            Console.WriteLine($"  {m.DateLabel}  {m.PlayersLabel}  {m.MapName}  {m.DurationLabel}  {m.VersionLabel}");
+        if (args.Length > 0)
+        {
+            var player = args[0];
+            var theirs = ReplayKrakenService.Filter(all, 100, player);
+            Console.WriteLine($"{theirs.Count} game(s) for {player}:");
+            foreach (var m in theirs.Take(5))
+                Console.WriteLine($"  {m.DateLabel}  {m.PlayersLabel}  {m.MapName}  {m.VersionLabel}");
+        }
+        Console.WriteLine("MATCHES SMOKE OK");
+        return 0;
+    }
 
     private static async Task<int> LiveAsync()
     {
@@ -105,8 +131,32 @@ public static class Program
             }
         }
 
+        ListVersions(installRoot);
+
         Console.WriteLine("LIVE SMOKE OK");
         return 0;
+    }
+
+    /// <summary>Read-only listing of the versions the launcher would adopt.
+    /// Uses throwaway settings so the user's settings file is never written.</summary>
+    private static void ListVersions(string installRoot)
+    {
+        var throwaway = Path.Combine(Path.GetTempPath(), $"cpl-live-{Guid.NewGuid():N}.json");
+        try
+        {
+            var settings = new AppSettings { FilePath = throwaway, RootPath = installRoot };
+            var manager = new VersionManager(settings);
+            var adopted = manager.AdoptExistingInstallations();
+            Console.WriteLine($"versions     : adopted {adopted} checkout(s)");
+            foreach (var v in manager.Versions)
+                Console.WriteLine(
+                    $"  - {v.Id,-12} {v.Name,-30} dir={v.Dir,-26} repo={v.RepoId,-10} " +
+                    $"{(v.TracksBranch ? "tracks branch" : "pinned " + v.PinnedSha?[..8])}  now {v.InstalledSha?[..8]}");
+        }
+        finally
+        {
+            File.Delete(throwaway);
+        }
     }
 
     private static async Task<int> TempAsync()
@@ -122,15 +172,18 @@ public static class Program
         {
             // Local "release" repo with the files the game build must have.
             Directory.CreateDirectory(gameSrc);
-            RunGit(gameSrc, "init", "-q");
+            RunGit(gameSrc, "init", "-q", "-b", "main");
             Directory.CreateDirectory(Path.Combine(gameSrc, "plugins"));
             File.WriteAllText(Path.Combine(gameSrc, "Cosmonarchy BW.exe"), "placeholder");
             RunGit(gameSrc, "add", ".");
             RunGit(gameSrc, "-c", "user.email=smoke@test", "-c", "user.name=Smoke", "commit", "-q", "-m", "initial build");
+            string commitA;
+            using (var seed = new LibGit2Sharp.Repository(gameSrc))
+                commitA = seed.Head.Tip.Sha;
 
             // Local maps repo.
             Directory.CreateDirectory(mapsSrc);
-            RunGit(mapsSrc, "init", "-q");
+            RunGit(mapsSrc, "init", "-q", "-b", "main");
             File.WriteAllText(Path.Combine(mapsSrc, "sample.map"), "map");
             RunGit(mapsSrc, "add", ".");
             RunGit(mapsSrc, "-c", "user.email=smoke@test", "-c", "user.name=Smoke", "commit", "-q", "-m", "maps");
@@ -149,9 +202,22 @@ public static class Program
                 LinuxPrefixRoot = prefixRoot,
             };
             var entry = new RepoEntry("release-smoke", "Release (Smoke)", gameSrc, RepoKind.Game, BuildDir: "Release");
-            var service = new InstallService(settings, entry, mapsUrl: mapsSrc);
+            var v1 = new GameVersion { Id = "release", Name = "Release (Smoke)", RepoId = "release-smoke", Dir = "Release" };
+            var service = new InstallService(settings, entry, v1, mapsUrl: mapsSrc);
 
-            await service.InstallAsync(null, Reporter("install"));
+            await service.InstallAsync(Reporter("install"));
+
+            // Push a second build, then install it as a NEW pinned version:
+            // both versions must coexist, each in its own checkout.
+            var manager = new VersionManager(settings, [entry]);
+            var adopted = manager.AdoptExistingInstallations(known: [entry]);
+            File.WriteAllText(Path.Combine(gameSrc, "Cosmonarchy BW.exe"), "placeholder v2");
+            RunGit(gameSrc, "add", ".");
+            RunGit(gameSrc, "-c", "user.email=smoke@test", "-c", "user.name=Smoke", "commit", "-q", "-m", "second build");
+
+            await manager.InstallAsync(entry, commitA, "Old build", Reporter("install2"), mapsUrl: mapsSrc);
+            var adoptedVersion = manager.Find("release")!;
+            await manager.UpdateAsync(adoptedVersion, Reporter("update"), mapsUrl: mapsSrc);
 
             var ok = true;
             void Check(string label, bool cond)
@@ -164,6 +230,16 @@ public static class Program
             Check("maps cloned", File.Exists(Path.Combine(service.MapsDir, "sample.map")));
             Check("crownlink downloaded", File.Exists(Path.Combine(installRoot, "Starcraft", "CrownLink.snp")));
             Check("patches applied", (settings.PatchesInstalled?.Count ?? 0) > 0);
+
+            var oldBuildExe = Path.Combine(installRoot, "versions", "old-build", "Cosmonarchy BW.exe");
+            Check("adopted legacy checkout", adopted == 1);
+            Check("second version cloned", File.Exists(oldBuildExe));
+            Check("pinned version frozen", File.Exists(oldBuildExe)
+                && File.ReadAllText(oldBuildExe) == "placeholder");
+            Check("tracked version updated",
+                File.ReadAllText(Path.Combine(installRoot, "Release", "Cosmonarchy BW.exe")) == "placeholder v2");
+            Check("version list has both", settings.Versions.Count == 2);
+            Check("new version selected", settings.SelectedVersionId == "old-build");
 
             Console.WriteLine(ok ? "TEMP SMOKE OK" : "TEMP SMOKE FAILED");
             return ok ? 0 : 1;

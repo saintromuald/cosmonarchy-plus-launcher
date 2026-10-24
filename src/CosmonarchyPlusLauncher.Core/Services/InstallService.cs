@@ -5,28 +5,31 @@ using CosmonarchyPlusLauncher.Core.Settings;
 
 namespace CosmonarchyPlusLauncher.Core.Services;
 
-/// <summary>The install/update/play pipeline:
-/// StarCraft base -> remote patches -> CrownLink -> game repo -> maps ->
-/// variant staging -> launch.</summary>
+/// <summary>The install/update/play pipeline, scoped to one installed game
+/// version: shared base (StarCraft -> remote patches -> CrownLink -> maps ->
+/// Wine fix), then the version's own game checkout -> variant staging ->
+/// launch. All versions under the same root share the base.</summary>
 public sealed class InstallService
 {
     private readonly AppSettings _settings;
     private readonly RepoEntry _repo;
+    private readonly GameVersion _version;
     private readonly string _mapsUrl;
     private readonly PatchManifestService _patches = new();
     private readonly CrownLinkService _crownLink = new();
 
-    public InstallService(AppSettings settings, RepoEntry repo, string? mapsUrl = null)
+    public InstallService(AppSettings settings, RepoEntry repo, GameVersion version, string? mapsUrl = null)
     {
         _settings = settings;
         _repo = repo;
+        _version = version;
         _mapsUrl = mapsUrl ?? RepoCatalog.Maps.Url;
     }
 
     public string InstallRoot => _settings.RootPath;
     public string StarcraftDir => Path.Combine(InstallRoot, "Starcraft");
     public string StarcraftExe => Path.Combine(StarcraftDir, "StarCraft.exe");
-    public string RepoDir => Path.Combine(InstallRoot, _repo.BuildDir ?? "Release");
+    public string RepoDir => Path.Combine(InstallRoot, _version.Dir);
     public string MapsDir
     {
         get
@@ -60,24 +63,23 @@ public sealed class InstallService
         ? Path.Combine(InstallRoot, "variants")
         : Path.Combine(_settings.LinuxPrefixRoot, "variants");
 
-    public async Task InstallAsync(string? commitSha, IProgress<string>? progress = null, CancellationToken ct = default)
+    /// <summary>Install/update this version: ensure the shared base, then
+    /// bring the version's own checkout to its tracked branch tip or its
+    /// pinned commit.</summary>
+    public async Task InstallAsync(IProgress<string>? progress = null, CancellationToken ct = default)
     {
-        await EnsureStarcraftAsync(progress, ct);
-        await ApplyPatchesAsync(progress, ct);
-        await InstallCrownLinkAsync(progress, ct);
-        await EnsureGameRepoAsync(commitSha, progress, ct);
-        await EnsureMapsAsync(progress, ct);
-        FixWineRegistry(progress);
+        await EnsureBaseAsync(progress, ct);
+        await EnsureVersionAsync(progress, ct);
         HealTempMpq(progress);
     }
 
-    public async Task PlayAsync(string? commitSha, IProgress<string>? progress = null, CancellationToken ct = default)
+    public async Task PlayAsync(IProgress<string>? progress = null, CancellationToken ct = default)
     {
-        await InstallAsync(commitSha, progress, ct);
+        await InstallAsync(progress, ct);
         var stager = new PluginStager(RepoDir, StageDir,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         stager.Apply(_settings.Variant, _settings.NetcodeRole);
-        progress?.Report($"Launching {_repo.Name}");
+        progress?.Report($"Launching {_version.Name}");
         EnsureFullscreenDisplay(progress);
         await LaunchAsync(ct);
     }
@@ -87,7 +89,7 @@ public sealed class InstallService
     /// unstaged and rollback disarmed), matching how they were recorded.</summary>
     public async Task PlayReplayAsync(string replayPath, IProgress<string>? progress = null, CancellationToken ct = default)
     {
-        await InstallAsync(null, progress, ct);
+        await InstallAsync(progress, ct);
         var stager = new PluginStager(RepoDir, StageDir,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         stager.Apply(Variant.Original, null);
@@ -102,6 +104,51 @@ public sealed class InstallService
         progress?.Report($"Launching replay {Path.GetFileName(replayPath)}");
         EnsureFullscreenDisplay(progress);
         await LaunchAsync(ct);
+    }
+
+    private async Task EnsureBaseAsync(IProgress<string>? progress, CancellationToken ct)
+    {
+        await EnsureStarcraftAsync(progress, ct);
+        await ApplyPatchesAsync(progress, ct);
+        await InstallCrownLinkAsync(progress, ct);
+        await EnsureMapsAsync(progress, ct);
+        FixWineRegistry(progress);
+    }
+
+    private async Task EnsureVersionAsync(IProgress<string>? progress, CancellationToken ct)
+    {
+        using var repo = new RepoManager(RepoDir, _repo.Url);
+        if (repo.IsInstalled())
+        {
+            var remoteName = repo.EnsureRemoteName();
+            if (repo.HasLocalChanges())
+            {
+                // Never clobber local edits (hotloader work, tweaked
+                // plugins): launch or play with the checkout as it is.
+                progress?.Report("Local changes detected; using the checkout as-is");
+                return;
+            }
+
+            repo.Fetch(progress);
+            if (_version.TracksBranch)
+            {
+                var branch = string.IsNullOrWhiteSpace(_repo.Branch) ? "main" : _repo.Branch;
+                repo.CheckoutBranch(branch, remoteName, progress);
+            }
+            else
+            {
+                repo.ResetTo(_version.PinnedSha!, progress);
+            }
+        }
+        else
+        {
+            if (Directory.Exists(RepoDir))
+                Directory.Delete(RepoDir, recursive: true);
+            repo.Clone(progress);
+            if (!_version.TracksBranch)
+                repo.ResetTo(_version.PinnedSha!, progress);
+        }
+        await Task.CompletedTask; // git operations are sync in LibGit2Sharp
     }
 
     private async Task EnsureStarcraftAsync(IProgress<string>? progress, CancellationToken ct)
@@ -176,37 +223,6 @@ public sealed class InstallService
         _settings.Save();
     }
 
-    private async Task EnsureGameRepoAsync(string? commitSha, IProgress<string>? progress, CancellationToken ct)
-    {
-        using var repo = new RepoManager(RepoDir, _repo.Url);
-        if (repo.IsInstalled())
-        {
-            var remoteName = repo.EnsureRemoteName();
-            if (repo.HasLocalChanges())
-            {
-                progress?.Report("Local changes detected; launching as-is");
-            }
-            else
-            {
-                repo.Fetch(progress);
-                var branch = string.IsNullOrWhiteSpace(_repo.Branch) ? "main" : _repo.Branch;
-                if (commitSha is null)
-                    repo.CheckoutBranch(branch, remoteName, progress);
-                else
-                    repo.ResetTo(commitSha, progress);
-            }
-        }
-        else
-        {
-            if (Directory.Exists(RepoDir))
-                Directory.Delete(RepoDir, recursive: true);
-            repo.Clone(progress);
-            if (commitSha is not null)
-                repo.ResetTo(commitSha, progress);
-        }
-        await Task.CompletedTask; // git operations are sync in LibGit2Sharp
-    }
-
     private async Task EnsureMapsAsync(IProgress<string>? progress, CancellationToken ct)
     {
         using var maps = new RepoManager(MapsDir, _mapsUrl);
@@ -227,7 +243,8 @@ public sealed class InstallService
 
     /// <summary>Under Wine, the game needs ddraw overridden to
     /// native,builtin. On real Windows this is a no-op.</summary>
-    private void FixWineRegistry(IProgress<string>? progress)    {
+    private void FixWineRegistry(IProgress<string>? progress)
+    {
         if (OperatingSystem.IsWindows())
             return;
 
@@ -297,15 +314,17 @@ public sealed class InstallService
             UseShellExecute = false,
             ArgumentList =
             {
-                $"C:\\Cosmonarchy\\{_repo.BuildDir ?? "Release"}\\Cosmonarchy BW.exe",
+                $@"C:\Cosmonarchy\{_version.Dir.Replace('/', '\\')}\Cosmonarchy BW.exe",
             },
         };
         startInfo.Environment["WINEPREFIX"] = Path.Combine(_settings.LinuxPrefixRoot, "prefix");
         startInfo.Environment["PROTONPATH"] = "GE-Proton";
-        startInfo.Environment["GAMEID"] = $"umu-cosmonarchy-{_repo.BuildDir ?? "Release"}";
+        startInfo.Environment["GAMEID"] = $"umu-cosmonarchy-{_version.Id}";
         startInfo.Environment["PROTON_VERB"] = "waitforexitandrun";
         Process.Start(startInfo);
-        await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+        // Return once the game process is up: the launcher stays usable to
+        // switch versions while the game runs.
+        await Task.CompletedTask;
     }
 
     private static async Task WaitForStarcraftWindowAsync(CancellationToken ct)
