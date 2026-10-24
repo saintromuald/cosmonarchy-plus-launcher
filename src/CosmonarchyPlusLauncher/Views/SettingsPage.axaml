@@ -57,8 +57,13 @@
         </StackPanel>
 
         <StackPanel Grid.Row="9" Orientation="Horizontal" Spacing="8" Margin="0,14,0,0">
-            <Button Content="Check for updates" Command="{Binding CheckForUpdatesCommand}" />
-            <TextBlock Text="{Binding UpdateStatus}" VerticalAlignment="Center" />
+            <Button Content="Check for updates" Command="{Binding CheckForUpdatesCommand}"
+                    IsEnabled="{Binding !UpdateBusy}" />
+            <Button Content="Install update" Command="{Binding InstallUpdateCommand}"
+                    IsVisible="{Binding CanInstallUpdate}" IsEnabled="{Binding !UpdateBusy}" />
+            <Button Content="Open release page" Command="{Binding OpenReleaseCommand}"
+                    IsVisible="{Binding CanOpenRelease}" />
+            <TextBlock Text="{Binding UpdateStatus}" VerticalAlignment="Center" TextWrapping="Wrap" />
         </StackPanel>
 
         <TextBlock Grid.Row="10" Text="Linux installs live inside the GE-Proton prefix (~/Games/cosmonarchy); the install root is its drive_c/Cosmonarchy directory. The webhook lets “Post to Discord” send shared notes and lists straight to a channel; sharing also works without it, via the clipboard. The GitHub token is only used to publish and unpublish your own shares on the community board."

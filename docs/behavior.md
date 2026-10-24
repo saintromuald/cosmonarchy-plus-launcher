@@ -132,6 +132,24 @@ The launcher checks a published update feed (the original uses
 Releases of this repository, with version comparison and a mandatory-minimum
 field.
 
+The Settings page checks `saintromuald/cosmonarchy-plus-launcher` releases
+and, when a newer version exists, offers a one-click **Install update**:
+
+- **Linux directory install** (self-contained publish in
+  `~/.local/opt/cosmonarchy-plus-launcher`): downloads
+  `CosmonarchyPlusLauncher-linux-x64.tar.gz`, verifies it, extracts it to
+  `.cosmonarchy-plus-launcher-update/staging`, then runs a detached apply
+  script that waits for the app to exit, swaps the directories (keeping the
+  previous version as `.cosmonarchy-plus-launcher-backup`) and relaunches.
+- **Windows single-file exe**: same flow with the `win-x64.zip` asset and a
+  `cmd` apply script that replaces the exe after the process ends.
+- **AppImage / package installs**: the launcher cannot replace itself; the
+  update is offered through the release page instead.
+
+A failed swap restores the old directory; a broken update never touches the
+install (staging is verified first). Version bumps land in the csproj and the
+Arch PKGBUILD together.
+
 ## 7. Settings
 
 Persisted in `~/.config/cosmonarchy-plus-launcher/settings.json` (Linux) or

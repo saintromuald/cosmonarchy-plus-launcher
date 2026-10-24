@@ -46,6 +46,17 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _updateStatus = "";
 
+    [ObservableProperty]
+    private bool _updateBusy;
+
+    [ObservableProperty]
+    private bool _canInstallUpdate;
+
+    [ObservableProperty]
+    private bool _canOpenRelease;
+
+    private UpdateInfo? _update;
+
     [RelayCommand]
     private void Save()
     {
@@ -80,29 +91,63 @@ public partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task CheckForUpdatesAsync()
     {
+        UpdateBusy = true;
         UpdateStatus = $"Checking for updates (current: {CurrentVersion})…";
         var info = await new UpdateService().CheckAsync(CurrentVersion);
+        _update = info;
         if (info is null)
         {
-            UpdateStatus = "Could not check for updates.";
-            return;
+            UpdateStatus = "Could not check for updates (offline or rate-limited?).";
         }
-
-        if (info.IsNewer)
+        else if (!info.IsNewer)
         {
-            UpdateStatus = $"Version {info.Tag} is available.";
-            try
-            {
-                Process.Start(new ProcessStartInfo(info.Url) { UseShellExecute = true });
-            }
-            catch (Exception ex)
-            {
-                UpdateStatus = $"Version {info.Tag} is available at {info.Url} ({ex.Message})";
-            }
+            UpdateStatus = $"You are on the latest version ({CurrentVersion}).";
         }
         else
         {
-            UpdateStatus = "You are on the latest version.";
+            var kind = SelfUpdater.GetInstallKind();
+            CanInstallUpdate = info.AssetUrl is not null && kind is InstallKind.LinuxDirectory or InstallKind.WindowsSingleFile;
+            UpdateStatus = CanInstallUpdate
+                ? $"Version {info.Tag} is available ({info.AssetName}). Install it right here — the launcher restarts itself."
+                : $"Version {info.Tag} is available. This install updates elsewhere (AppImage or package manager) — use the release page.";
+        }
+        CanOpenRelease = _update is not null;
+        UpdateBusy = false;
+    }
+
+    [RelayCommand]
+    private async Task InstallUpdateAsync()
+    {
+        if (_update is not { IsNewer: true } info)
+            return;
+        UpdateBusy = true;
+        try
+        {
+            var progress = new Progress<string>(s => UpdateStatus = s);
+            var prepared = await new SelfUpdater().PrepareAsync(SelfUpdater.AppDirectory(), info, progress);
+            UpdateStatus = "Update staged — restarting to finish…";
+            UpdateBusy = false;
+            SelfUpdater.ApplyAndExit(prepared);
+        }
+        catch (Exception ex)
+        {
+            UpdateBusy = false;
+            UpdateStatus = $"Update failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void OpenRelease()
+    {
+        if (_update is not { } info)
+            return;
+        try
+        {
+            Process.Start(new ProcessStartInfo(info.Url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus = $"Version {info.Tag} is available at {info.Url} ({ex.Message})";
         }
     }
 }

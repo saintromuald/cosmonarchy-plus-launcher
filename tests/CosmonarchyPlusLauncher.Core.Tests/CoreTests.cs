@@ -2,6 +2,7 @@ using CosmonarchyPlusLauncher.Core.Models;
 using CosmonarchyPlusLauncher.Core.Services;
 using CosmonarchyPlusLauncher.Core.Settings;
 using LibGit2Sharp;
+using ReleaseAsset = Octokit.ReleaseAsset;
 
 namespace CosmonarchyPlusLauncher.Core.Tests;
 
@@ -924,5 +925,75 @@ public class CoreTests
         Assert.False(DiscordWebhook.IsValidWebhookUrl("https://example.com/api/webhooks/123/abc"));
         Assert.False(DiscordWebhook.IsValidWebhookUrl(""));
         Assert.False(DiscordWebhook.IsValidWebhookUrl(null));
+    }
+
+    [Fact]
+    public void UpdateService_compares_versions_numerically()
+    {
+        Assert.True(UpdateService.CompareVersions("0.3.0", "0.2.0") > 0);
+        Assert.True(UpdateService.CompareVersions("0.10.0", "0.9.9") > 0);
+        Assert.True(UpdateService.CompareVersions("0.2.0", "0.2.0") == 0);
+        Assert.True(UpdateService.CompareVersions("0.1.9", "0.2.0") < 0);
+        Assert.True(UpdateService.CompareVersions("0.3.0-beta1", "0.3.0") == 0);
+    }
+
+    [Fact]
+    public void UpdateService_picks_the_platform_asset()
+    {
+        static ReleaseAsset Asset(string name) => new(
+            "https://example.com/" + name, 1, "node", name, "label", "uploaded",
+            "https://example.com/" + name, 1024, 0,
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
+            "application/octet-stream", null);
+
+        var assets = new[]
+        {
+            Asset("CosmonarchyPlusLauncher-linux-x64.tar.gz"),
+            Asset("CosmonarchyPlusLauncher-win-x64.zip"),
+            Asset("CosmonarchyPlusLauncher-x86_64.AppImage"),
+        };
+
+        Assert.Equal("CosmonarchyPlusLauncher-linux-x64.tar.gz",
+            UpdateService.PickAsset(assets, windows: false)!.Name);
+        Assert.Equal("CosmonarchyPlusLauncher-win-x64.zip",
+            UpdateService.PickAsset(assets, windows: true)!.Name);
+        Assert.Null(UpdateService.PickAsset([], windows: false));
+        Assert.Null(UpdateService.PickAsset([Asset("CosmonarchyPlusLauncher-x86_64.AppImage")], windows: false));
+    }
+
+    [Fact]
+    public void SelfUpdater_detects_the_linux_directory_install()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"cpl-kind-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "CosmonarchyPlusLauncher"), "");
+            Assert.Equal(InstallKind.Other, SelfUpdater.GetInstallKind(dir));
+
+            File.WriteAllText(Path.Combine(dir, "CosmonarchyPlusLauncher.deps.json"), "{}");
+            Assert.Equal(InstallKind.LinuxDirectory, SelfUpdater.GetInstallKind(dir));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SelfUpdater_refuses_to_prepare_for_unmanaged_installs()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"cpl-noinst-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            var info = new UpdateInfo("v9.9.9", "Nine", "https://example.com", "", true, null, null);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new SelfUpdater().PrepareAsync(dir, info));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 }

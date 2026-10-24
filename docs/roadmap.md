@@ -40,7 +40,9 @@
 - [x] Arch package (PKGBUILD) for Omarchy
 - [x] AppImage recipe
 - [ ] Flatpak (stretch)
-- [x] Self-updater from GitHub Releases
+- [x] Self-updater: in-app check + one-click install and restart (directory
+  installs on Linux, single-file exe on Windows; AppImage/package installs
+  fall back to the release page)
 
 ## M4 — Replace the scripts
 
