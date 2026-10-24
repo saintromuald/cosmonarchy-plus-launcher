@@ -171,21 +171,8 @@ public sealed class SelfUpdater
     private async Task DownloadAsync(
         UpdateInfo info, string destination, IProgress<string>? progress, CancellationToken ct)
     {
-        using var response = await _http.GetAsync(info.AssetUrl, HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
-        var total = response.Content.Headers.ContentLength;
-        await using var source = await response.Content.ReadAsStreamAsync(ct);
-        await using var target = File.Create(destination);
-        var buffer = new byte[81920];
-        long received = 0;
-        int read;
-        while ((read = await source.ReadAsync(buffer, ct)) > 0)
-        {
-            await target.WriteAsync(buffer.AsMemory(0, read), ct);
-            received += read;
-            if (total is > 0)
-                progress?.Report($"Downloading {info.AssetName}… {100 * received / total}%");
-        }
+        await HttpDownload.ToFileAsync(
+            _http, info.AssetUrl, destination, progress, $"Downloading {info.AssetName}", ct);
     }
 
     /// <summary>Launches the detached apply script and terminates this

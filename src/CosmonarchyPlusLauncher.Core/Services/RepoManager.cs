@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using CosmonarchyPlusLauncher.Core.Models;
 using LibGit2Sharp;
+using LibGit2Sharp.Handlers;
 
 namespace CosmonarchyPlusLauncher.Core.Services;
 
@@ -78,6 +80,7 @@ public sealed class RepoManager : IDisposable
         Repository.Clone(_url, _dir, new CloneOptions
         {
             RecurseSubmodules = true,
+            FetchOptions = { OnTransferProgress = TransferReporter(progress, $"Cloning {_url}") },
         });
     }
 
@@ -97,7 +100,35 @@ public sealed class RepoManager : IDisposable
             ? remote.FetchRefSpecs.Select(s => s.Specification)
             : new[] { $"+refs/heads/*:refs/remotes/{name}/*" };
         progress?.Report($"Fetching {remote.Url}");
-        repo.Network.Fetch(name, refspecs);
+        repo.Network.Fetch(name, refspecs, new FetchOptions
+        {
+            OnTransferProgress = TransferReporter(progress, $"Fetching {remote.Url}"),
+        });
+    }
+
+    /// <summary>Throttled git transfer progress: libgit2 reports very often,
+    /// so this only forwards a message twice a second or every 256 KiB.
+    /// Messages read "Cloning <url>… 128 MB · 2,041 / 4,512 objects" — no
+    /// percentage, because git cannot know the transfer size up front.</summary>
+    private static TransferProgressHandler TransferReporter(IProgress<string>? progress, string label)
+    {
+        if (progress is null)
+            return _ => false;
+        var stopwatch = Stopwatch.StartNew();
+        long lastBytes = 0;
+        return t =>
+        {
+            if (t.ReceivedBytes - lastBytes < 256 * 1024 &&
+                stopwatch.ElapsedMilliseconds < 500)
+                return false;
+            stopwatch.Restart();
+            lastBytes = t.ReceivedBytes;
+            var objects = t.TotalObjects > 0
+                ? $"{t.ReceivedObjects:N0} / {t.TotalObjects:N0} objects"
+                : $"{t.ReceivedObjects:N0} objects";
+            progress.Report($"{label}… {HttpDownload.FormatBytes(t.ReceivedBytes)} · {objects}");
+            return false;
+        };
     }
 
     public void ResetTo(string shaOrRef, IProgress<string>? progress = null)
@@ -246,7 +277,10 @@ public sealed class RepoManager : IDisposable
         progress?.Report("Fetching full version log");
         var repo = Open();
         var remote = repo.Network.Remotes[name] ?? throw new InvalidOperationException($"Remote {name} disappeared from {_dir}");
-        repo.Network.Fetch(name, new[] { "+refs/*:refs/*" }, new FetchOptions());
+        repo.Network.Fetch(name, new[] { "+refs/*:refs/*" }, new FetchOptions
+        {
+            OnTransferProgress = TransferReporter(progress, $"Fetching {remote.Url}"),
+        });
     }
 
     private Repository Open() => _repo ??= new Repository(_dir);

@@ -165,16 +165,10 @@ public sealed class InstallService
         if (File.Exists(StarcraftExe))
             return;
 
-        progress?.Report("Downloading StarCraft");
         var zip = Path.Combine(InstallRoot, "starcraft.zip");
         Directory.CreateDirectory(InstallRoot);
-        using (var http = new HttpClient())
-        using (var res = await http.GetAsync(RemoteAssets.StarcraftZip, ct))
-        using (var fs = File.Create(zip))
-        {
-            res.EnsureSuccessStatusCode();
-            await res.Content.CopyToAsync(fs, ct);
-        }
+        using var http = new HttpClient();
+        await HttpDownload.ToFileAsync(http, RemoteAssets.StarcraftZip, zip, progress, "Downloading StarCraft", ct);
 
         progress?.Report("Extracting StarCraft");
         ZipFile.ExtractToDirectory(zip, InstallRoot, overwriteFiles: true);
@@ -192,17 +186,14 @@ public sealed class InstallService
         {
             if (installed.Contains(patch.Id))
                 continue;
-            progress?.Report($"Installing patch {patch.Id}");
             using var http = new HttpClient();
             var target = Path.Combine(InstallRoot, string.IsNullOrEmpty(patch.Filename)
                 ? Path.GetFileName(new Uri(patch.Url).AbsolutePath)
                 : patch.Filename);
-            using (var res = await http.GetAsync(patch.Url, ct))
-            using (var fs = File.Create(target))
-            {
-                res.EnsureSuccessStatusCode();
-                await res.Content.CopyToAsync(fs, ct);
-            }
+            var label = string.IsNullOrEmpty(patch.Filename)
+                ? $"Downloading patch {patch.Id}"
+                : $"Downloading {patch.Filename}";
+            await HttpDownload.ToFileAsync(http, patch.Url, target, progress, label, ct);
 
             if (target.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
@@ -222,12 +213,8 @@ public sealed class InstallService
             && _settings.CrownLinkAssetId == id)
             return;
 
-        progress?.Report("Downloading CrownLink");
         using var http = new HttpClient();
-        using var res = await http.GetAsync(url, ct);
-        using var fs = File.Create(CrownLinkSnp);
-        res.EnsureSuccessStatusCode();
-        await res.Content.CopyToAsync(fs, ct);
+        await HttpDownload.ToFileAsync(http, url, CrownLinkSnp, progress, "Downloading CrownLink", ct);
         _settings.CrownLinkAssetId = id;
         _settings.Save();
     }

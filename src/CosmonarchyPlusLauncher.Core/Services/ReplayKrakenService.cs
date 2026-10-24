@@ -57,8 +57,9 @@ public sealed class ReplayKrakenService
         }
 
         progress?.Report("Downloading the match list from cosmonarchy.com…");
-        await using var stream = await _http.GetStreamAsync($"{ApiBase}/matches", ct);
-        var matches = await ParseMatchesAsync(stream, ct);
+        var bytes = await HttpDownload.ToBytesAsync(
+            _http, $"{ApiBase}/matches", progress, "Downloading match list", ct);
+        var matches = await ParseMatchesAsync(new MemoryStream(bytes), ct);
         progress?.Report($"{matches.Count} matches on the server.");
         WriteCache(matches);
         return matches;
@@ -94,10 +95,7 @@ public sealed class ReplayKrakenService
         }
 
         var url = $"{ApiBase}/matches/{match.MatchUuid}/download/{match.FileId}";
-        progress?.Report($"Downloading {match.FileName}…");
-        await using (var source = await _http.GetStreamAsync(url, ct))
-        await using (var target = File.Create(path))
-            await source.CopyToAsync(target, ct);
+        await HttpDownload.ToFileAsync(_http, url, path, progress, $"Downloading {match.FileName}", ct);
         return path;
     }
 

@@ -66,7 +66,21 @@ public partial class SettingsViewModel : ViewModelBase
     private string _updateStatus = "";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UpdateBarIndeterminate))]
     private bool _updateBusy;
+
+    /// <summary>Download progress as a fraction (0-1), or -1 while nothing
+    /// is downloading. The update status carries "NN%"; this feeds the bar.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UpdatePercent))]
+    [NotifyPropertyChangedFor(nameof(UpdateBarIndeterminate))]
+    private double _downloadFraction = -1;
+
+    public double UpdatePercent => DownloadFraction < 0 ? 0 : DownloadFraction * 100;
+
+    /// <summary>An indeterminate bar while busy work (checking, extracting)
+    /// runs without a byte percentage.</summary>
+    public bool UpdateBarIndeterminate => UpdateBusy && DownloadFraction < 0;
 
     [ObservableProperty]
     private bool _canInstallUpdate;
@@ -152,17 +166,24 @@ public partial class SettingsViewModel : ViewModelBase
         if (_update is not { IsNewer: true } info)
             return;
         UpdateBusy = true;
+        DownloadFraction = -1;
         try
         {
-            var progress = new Progress<string>(s => UpdateStatus = s);
+            var progress = new Progress<string>(s =>
+            {
+                UpdateStatus = s;
+                DownloadFraction = HttpDownload.PercentOf(s) is { } percent ? percent / 100 : -1;
+            });
             var prepared = await new SelfUpdater().PrepareAsync(SelfUpdater.AppDirectory(), info, progress);
             UpdateStatus = "Update staged — restarting to finish…";
             UpdateBusy = false;
+            DownloadFraction = -1;
             SelfUpdater.ApplyAndExit(prepared);
         }
         catch (Exception ex)
         {
             UpdateBusy = false;
+            DownloadFraction = -1;
             UpdateStatus = $"Update failed: {ex.Message}";
         }
     }

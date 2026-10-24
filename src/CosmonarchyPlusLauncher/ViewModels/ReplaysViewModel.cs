@@ -226,6 +226,24 @@ public partial class ReplaysViewModel : ViewModelBase
     public bool CanWatchPlus => !PlusBusy && SelectedPlusRow is not null;
     public bool CanUnfollowPlus => !PlusBusy && PlusPlayer != AllPlayers;
 
+    // ---- Download progress (shared by both online tabs) --------------------
+
+    /// <summary>Download progress as a fraction (0-1), or -1 while nothing
+    /// is downloading. Status messages carry "NN%"; this feeds the bars.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DownloadPercent))]
+    [NotifyPropertyChangedFor(nameof(OgBarIndeterminate))]
+    [NotifyPropertyChangedFor(nameof(PlusBarIndeterminate))]
+    [NotifyPropertyChangedFor(nameof(LocalBarIndeterminate))]
+    private double _downloadFraction = -1;
+
+    public double DownloadPercent => DownloadFraction < 0 ? 0 : DownloadFraction * 100;
+
+    /// <summary>An indeterminate bar while busy work (git fetches, unpacking)
+    /// runs without a byte percentage.</summary>
+    public bool OgBarIndeterminate => OgBusy && DownloadFraction < 0;
+    public bool PlusBarIndeterminate => PlusBusy && DownloadFraction < 0;
+
     // ---- Selected replay (notes panel) ------------------------------------
 
     [ObservableProperty] private OnlineMatch? _noteMatch;
@@ -252,8 +270,16 @@ public partial class ReplaysViewModel : ViewModelBase
 
     public bool CanPlay => !Busy && SelectedReplay is not null;
 
+    /// <summary>An indeterminate bar while busy work (git fetches, unpacking)
+    /// runs without a byte percentage.</summary>
+    public bool LocalBarIndeterminate => Busy && DownloadFraction < 0;
+
     partial void OnSelectedReplayChanged(string? value) => OnPropertyChanged(nameof(CanPlay));
-    partial void OnBusyChanged(bool value) => OnPropertyChanged(nameof(CanPlay));
+    partial void OnBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanPlay));
+        OnPropertyChanged(nameof(LocalBarIndeterminate));
+    }
 
     partial void OnOgSearchChanged(string value) => ReapplyFilters();
     partial void OnPlusSearchChanged(string value) => ReapplyFilters();
@@ -276,12 +302,14 @@ public partial class ReplaysViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(CanWatchOg));
         OnPropertyChanged(nameof(CanUnfollowOg));
+        OnPropertyChanged(nameof(OgBarIndeterminate));
     }
 
     partial void OnPlusBusyChanged(bool value)
     {
         OnPropertyChanged(nameof(CanWatchPlus));
         OnPropertyChanged(nameof(CanUnfollowPlus));
+        OnPropertyChanged(nameof(PlusBarIndeterminate));
     }
 
     partial void OnSelectedOgRowChanged(ReplayRow? value)
@@ -807,9 +835,10 @@ public partial class ReplaysViewModel : ViewModelBase
         if (match is null)
             return;
         SetBusy(isPlus, true);
+        DownloadFraction = -1;
         try
         {
-            var progress = new Progress<string>(s => SetStatus(isPlus, s));
+            var progress = new Progress<string>(s => SetStatusWithProgress(isPlus, s));
             SetStatus(isPlus, "Working out the build…");
             var build = await Task.Run(() => _watch.WatchAsync(match, progress, CancellationToken.None));
             _library.MarkWatched(match.MatchUuid, match.FileId, match.VersionLabel);
@@ -825,6 +854,7 @@ public partial class ReplaysViewModel : ViewModelBase
         finally
         {
             SetBusy(isPlus, false);
+            DownloadFraction = -1;
         }
     }
 
@@ -833,9 +863,10 @@ public partial class ReplaysViewModel : ViewModelBase
         if (match is null)
             return;
         SetBusy(isPlus, true);
+        DownloadFraction = -1;
         try
         {
-            var progress = new Progress<string>(s => SetStatus(isPlus, s));
+            var progress = new Progress<string>(s => SetStatusWithProgress(isPlus, s));
             var path = await _kraken.DownloadReplayAsync(match, ReplayRoot, progress);
             SetStatus(isPlus, $"Saved {Path.GetFileName(path)} to {ReplayRoot}.");
             RefreshList();
@@ -847,6 +878,7 @@ public partial class ReplaysViewModel : ViewModelBase
         finally
         {
             SetBusy(isPlus, false);
+            DownloadFraction = -1;
         }
     }
 
@@ -854,9 +886,14 @@ public partial class ReplaysViewModel : ViewModelBase
     {
         OgBusy = true;
         PlusBusy = true;
+        DownloadFraction = -1;
         try
         {
-            var progress = new Progress<string>(s => OgStatus = s);
+            var progress = new Progress<string>(s =>
+            {
+                OgStatus = s;
+                DownloadFraction = HttpDownload.PercentOf(s) is { } percent ? percent / 100 : -1;
+            });
             var all = await _kraken.GetMatchesAsync(force, progress, CancellationToken.None);
 
             var plusRelease = ForkShas(prerelease: false);
@@ -887,6 +924,7 @@ public partial class ReplaysViewModel : ViewModelBase
         {
             OgBusy = false;
             PlusBusy = false;
+            DownloadFraction = -1;
         }
     }
 
@@ -999,6 +1037,14 @@ public partial class ReplaysViewModel : ViewModelBase
             OgStatus = text;
     }
 
+    /// <summary>Set the tab status and, when the message carries a download
+    /// percentage, move the shared progress bar.</summary>
+    private void SetStatusWithProgress(bool isPlus, string text)
+    {
+        SetStatus(isPlus, text);
+        DownloadFraction = HttpDownload.PercentOf(text) is { } percent ? percent / 100 : -1;
+    }
+
     private void SetBusy(bool isPlus, bool busy)
     {
         if (isPlus)
@@ -1033,6 +1079,7 @@ public partial class ReplaysViewModel : ViewModelBase
 
         Busy = true;
         Status = "Launching replay…";
+        DownloadFraction = -1;
         try
         {
             await PlayReplayFileAsync(replay);
@@ -1045,17 +1092,22 @@ public partial class ReplaysViewModel : ViewModelBase
         finally
         {
             Busy = false;
+            DownloadFraction = -1;
         }
     }
 
-    private static async Task PlayReplayFileAsync(string replay)
+    private async Task PlayReplayFileAsync(string replay)
     {
         var version = AppRuntime.Versions.Selected
                       ?? throw new InvalidOperationException("No installed version — install one on the Play page first.");
         var repo = RepoCatalog.Find(version.RepoId)
                    ?? throw new InvalidOperationException("No repository configured.");
         var service = AppRuntime.CreateInstaller(repo, version);
-        var progress = new Progress<string>(_ => { });
+        var progress = new Progress<string>(s =>
+        {
+            Status = s;
+            DownloadFraction = HttpDownload.PercentOf(s) is { } percent ? percent / 100 : -1;
+        });
         await Task.Run(() => service.PlayReplayAsync(replay, progress, CancellationToken.None));
     }
 
