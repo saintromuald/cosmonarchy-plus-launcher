@@ -28,7 +28,7 @@ the Avalonia UI is scaffolded but not yet wired.
 | Replays tab | OG/Plus online lists with per-tab search, race/matchup and team-size filters, follow players; desynced games flagged red; favourites with add dates, watched history, private/shared notes with tags, named + titled saved lists; watch any game in one click |
 | Favourites tab | The local library: favourites (watched/new split), notes, saved lists, share/import (Discord-ready messages, files, webhook) |
 | Community tab | Public share board on a GitHub repo — browse, import, publish and unpublish shares stamped with your Discord name |
-| Self-updater | GitHub Releases check in Settings |
+| Self-updater | In-app: Settings → Check for updates → Install update; downloads the release asset, swaps the install and restarts (directory installs on Linux, single-file exe on Windows; AppImage/package installs open the release page) |
 | Packaging | CI builds win-x64 exe, linux-x64, AppImage; Arch PKGBUILD |
 
 ## Build

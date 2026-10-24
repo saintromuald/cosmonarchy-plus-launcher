@@ -1,7 +1,7 @@
 # Maintainer: saintromuald <saintromuald@users.noreply.github.com>
 # Clean-room, open-source Cosmonarchy BW launcher.
 pkgname=cosmonarchy-plus-launcher
-pkgver=0.1.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="Open-source cross-platform launcher for Cosmonarchy BW (install, update, variants, patches, account)"
 arch=('x86_64')
