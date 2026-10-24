@@ -239,6 +239,7 @@ public class CoreTests
             "height=960",
             "fullscreen=true",
             "windowed=true",
+            "keytogglefullscreen=0x0D",
             "maintas=true",
             "maxfps=333",
             "vsync=false",
@@ -256,11 +257,24 @@ public class CoreTests
         Assert.Contains("height=0", patched);
         Assert.DoesNotContain("width=1280", patched);
         Assert.DoesNotContain("height=960", patched);
+        // Alt+Enter (0x0D) conflicts with Cosmonarchy; the toggle moves to Alt+F11.
+        Assert.Contains("keytogglefullscreen=0x7A", patched);
+        Assert.DoesNotContain("keytogglefullscreen=0x0D", patched);
         Assert.Contains("maxfps=333", patched);
         Assert.Contains("vsync=false", patched);
         Assert.Contains("shader=Shaders\\nearest-neighbor.glsl", patched);
         Assert.Contains("renderer=auto", patched);
         Assert.Contains("screenshotdir=.\\Screenshots\\", patched);
+    }
+
+    [Fact]
+    public void DisplayIni_patch_adds_missing_toggle_key()
+    {
+        // No keytogglefullscreen: cnc-ddraw would fall back to Alt+Enter.
+        var patched = DisplayIni.Patch("[ddraw]\nwidth=800\nheight=600\n");
+
+        Assert.Contains("keytogglefullscreen=0x7A", patched);
+        Assert.Contains("width=0", patched);
     }
 
     [Fact]
