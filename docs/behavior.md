@@ -147,24 +147,34 @@ Persisted in `~/.config/cosmonarchy-plus-launcher/settings.json` (Linux) or
 
 ## 8. Replays
 
-Two tabs:
+Three tabs:
 
 - **Local files** — every `.rep` in the game's replay directory, newest first;
-  "Play selected" switches to the vanilla build, copies the file into
-  `Maps/Replays`, and launches straight into playback.
-- **Online games** — the ReplayKraken list behind cosmonarchy.com/matches
-  (`GET https://cosmonarchy.com/api/matches`, downloaded replays at
-  `/api/matches/<uuid>/download/<fileId>`). Shows the latest 20 games by
-  default; choosing a followed player shows their latest 100. Followed players
-  live in the settings (`followedPlayers`). The API returns every match in one
-  ~22 MB document with no paging parameters, so the mapped summaries are
-  cached in `~/.local/share/cosmonarchy-plus-launcher/matches-cache.json` and
-  refreshed on demand or after 10 minutes. "Watch selected" downloads the
-  replay into the replay directory and plays it like a local file; "Download
-  only" keeps it for later.
+  "Play selected" switches to the vanilla build and launches straight into
+  playback.
+- **Cosmonarchy OG** and **Cosmonarchy Plus** — the ReplayKraken list behind
+  cosmonarchy.com/matches (`GET https://cosmonarchy.com/api/matches`,
+  downloads at `/api/matches/<uuid>/download/<fileId>`), split by which
+  repository published the build. A short SHA reachable from the maintainer's
+  fork is a Plus game; everything else is an OG game. Each tab has its own
+  search box (player, map, uploader, version) and its own follow-player
+  filter, so the two pools never mix. Shows the latest 20 by default; a
+  followed player or a search shows up to 100. Followed players live in the
+  settings (`followedPlayers`). The API returns every match in one ~22 MB
+  document with no paging parameters, so the mapped summaries are cached in
+  `~/.local/share/cosmonarchy-plus-launcher/matches-cache.json` and refreshed
+  on demand or after 10 minutes.
 
-Matches carry the short build SHA and channel the replay was recorded on
-(`gameVersion`, `gameVersionKind`); the page compares that with the installed
-checkout and warns when they differ — a replay only loads on its own build.
-Version-pinned switching (CosmoWatch's partial-clone store) is the next step;
-for now update or pick a matching version before watching.
+Watch is one click and resolves everything from the match:
+
+1. Read `gameVersion` (short SHA) and `gameVersionKind` (Release/Prerelease).
+2. Resolve the SHA against the fork and upstream remotes of the matching
+   checkout, and classify it as Plus or OG.
+3. Fetch if needed, then check out that exact commit **detached** (no branch
+   pointer moves) in the channel checkout (`Release`/`Prerelease`).
+4. Download the replay into `Starcraft/Maps/Replays`, stage the vanilla
+   plugins, and launch `Cosmonarchy BW.exe` with the replay path as its
+   argument, which starts playback immediately.
+
+A running game blocks watching with a clear message. Play/Update on the Play
+page puts the tracked branch back afterwards.
