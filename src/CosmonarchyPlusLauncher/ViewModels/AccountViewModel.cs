@@ -101,6 +101,11 @@ public partial class AccountViewModel : ViewModelBase
     [RelayCommand]
     private void OpenDiscord() => OpenBrowser("https://discord.gg/s5SKBmY");
 
+    [RelayCommand]
+    private void OpenChanges() => OpenBrowser(
+        "https://github.com/saintromuald/cosmonarchy-plus/blob/main/" +
+        "Differences%20between%20Cosmonarchy%20OG%20and%20Cosmonarchy%20Plus.md");
+
     private static void OpenBrowser(string url)
     {
         try
