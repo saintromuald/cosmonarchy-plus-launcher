@@ -319,10 +319,104 @@ public sealed class InstallService
         startInfo.Environment["PROTONPATH"] = "GE-Proton";
         startInfo.Environment["GAMEID"] = $"umu-cosmonarchy-{_version.Id}";
         startInfo.Environment["PROTON_VERB"] = "waitforexitandrun";
-        Process.Start(startInfo);
+
+        // Docked play: a scale-2 handheld panel + scale-1 external monitor mix
+        // into one Xwayland layout that the game miscomputes (broken window
+        // size, and the X pointer freezes when the real pointer crosses the
+        // seam). With the panel disabled the game sees one clean screen, the
+        // same workaround cosmo-variant applies for the script launchers.
+        var panel = DisablePanelForDockedPlay();
+        var game = Process.Start(startInfo);
+        // Restore the panel when the game exits, without keeping the Play
+        // flow busy: the launcher stays usable while the game runs.
+        if (panel is not null)
+            _ = RestorePanelWhenExitedAsync(game, panel.Value);
+
         // Return once the game process is up: the launcher stays usable to
         // switch versions while the game runs.
         await Task.CompletedTask;
+    }
+
+    /// <summary>If Hyprland is running with the handheld panel (eDP-1) and an
+    /// external display (HDMI-A-1) both active, disable the panel for the
+    /// duration of play and return true; otherwise return null.</summary>
+    private bool? DisablePanelForDockedPlay()
+    {
+        if (!OperatingSystem.IsLinux())
+            return null;
+        const string hyprctl = "/usr/bin/hyprctl";
+        if (!File.Exists(hyprctl))
+            return null;
+        try
+        {
+            var info = new ProcessStartInfo(hyprctl)
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                ArgumentList = { "monitors", "-j" },
+            };
+            using var proc = Process.Start(info);
+            if (proc is null)
+                return null;
+            var json = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit();
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            bool hdmi = false, panel = false;
+            foreach (var m in doc.RootElement.EnumerateArray())
+            {
+                if (!m.TryGetProperty("name", out var name))
+                    continue;
+                var disabled = m.TryGetProperty("disabled", out var d) && d.ValueKind == System.Text.Json.JsonValueKind.True;
+                if (name.GetString() == "HDMI-A-1" && !disabled)
+                    hdmi = true;
+                if (name.GetString() == "eDP-1" && !disabled)
+                    panel = true;
+            }
+            if (!hdmi || !panel)
+                return null;
+            return RunHyprctl("eval", "hl.monitor({output='eDP-1', disabled=true})");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static async Task RestorePanelWhenExitedAsync(Process game, bool changed)
+    {
+        try
+        {
+            await game.WaitForExitAsync();
+        }
+        catch
+        {
+            // The game process handle may be gone; restore regardless.
+        }
+        if (changed)
+            RunHyprctl("eval", "hl.monitor({output='eDP-1', disabled=false})");
+    }
+
+    private static bool RunHyprctl(params string[] args)
+    {
+        try
+        {
+            var info = new ProcessStartInfo("/usr/bin/hyprctl")
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            foreach (var a in args)
+                info.ArgumentList.Add(a);
+            using var proc = Process.Start(info);
+            proc?.WaitForExit();
+            return proc?.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>Map a file inside the Wine prefix's drive_c to its Windows
