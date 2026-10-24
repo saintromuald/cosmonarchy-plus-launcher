@@ -229,4 +229,71 @@ public class CoreTests
         using var mgr = new RepoManager(tmp, "https://example.com/x.git");
         Assert.False(mgr.IsInstalled());
     }
+
+    [Fact]
+    public void DisplayIni_patch_forces_fullscreen_and_preserves_other_keys()
+    {
+        var ini = string.Join("\n",
+            "[ddraw]",
+            "width=1280",
+            "height=960",
+            "fullscreen=true",
+            "windowed=true",
+            "maintas=true",
+            "maxfps=333",
+            "vsync=false",
+            "shader=Shaders\\nearest-neighbor.glsl",
+            "renderer=auto",
+            "",
+            "; a comment",
+            "screenshotdir=.\\Screenshots\\");
+
+        var patched = DisplayIni.Patch(ini);
+
+        Assert.Contains("windowed=false", patched);
+        Assert.Contains("fullscreen=true", patched);
+        Assert.Contains("width=0", patched);
+        Assert.Contains("height=0", patched);
+        Assert.DoesNotContain("width=1280", patched);
+        Assert.DoesNotContain("height=960", patched);
+        Assert.Contains("maxfps=333", patched);
+        Assert.Contains("vsync=false", patched);
+        Assert.Contains("shader=Shaders\\nearest-neighbor.glsl", patched);
+        Assert.Contains("renderer=auto", patched);
+        Assert.Contains("screenshotdir=.\\Screenshots\\", patched);
+    }
+
+    [Fact]
+    public void DisplayIni_patch_handles_windows_line_endings_and_adds_missing_section()
+    {
+        var patched = DisplayIni.Patch("[sound]\r\nvolume=5\r\n");
+
+        Assert.Contains("[ddraw]", patched);
+        Assert.Contains("width=0", patched);
+        Assert.Contains("windowed=false", patched);
+        Assert.Contains("[sound]", patched);
+        Assert.Contains("volume=5", patched);
+    }
+
+    [Fact]
+    public void DisplayIni_patch_leaves_keys_outside_ddraw_sections_alone()
+    {
+        var ini = string.Join("\n",
+            "[ddraw]",
+            "windowed=true",
+            "width=800",
+            "",
+            "windowed=true",
+            "",
+            "[sound]",
+            "volume=3");
+
+        var patched = DisplayIni.Patch(ini);
+
+        // The [ddraw] section is rewritten; the bare key outside any section
+        // is not ours to touch (cnc-ddraw config garbage is preserved as-is).
+        Assert.Contains("width=0", patched);
+        Assert.Contains("volume=3", patched);
+        Assert.Equal(2, patched.Split("windowed=").Length - 1);
+    }
 }

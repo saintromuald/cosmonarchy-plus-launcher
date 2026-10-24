@@ -117,6 +117,12 @@ public partial class PlayViewModel : ViewModelBase
             try
             {
                 using var manager = new RepoManager(repoDir, repo.Url);
+                if (_settings.FullVersionLog && manager.IsShallow())
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        Status = "Fetching the full version log (first run only)…");
+                    manager.Unshallow();
+                }
                 var commits = manager.Log(200).Select(c => new VersionOption(
                     $"{c.Sha[..8]}  {c.Date}  {c.Message}", c.Sha)).ToList();
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -125,7 +131,7 @@ public partial class PlayViewModel : ViewModelBase
                         Versions.Add(c);
                     if (SelectedVersion is null)
                         SelectedVersion = Versions[0];
-                    Status = $"{commits.Count} versions available.";
+                    Status = $"{commits.Count} version(s) on {repo.Branch} — pick one, or use Latest.";
                 });
             }
             catch (Exception ex)

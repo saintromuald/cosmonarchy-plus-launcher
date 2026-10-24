@@ -36,8 +36,10 @@
 
         <StackPanel Grid.Row="2" Margin="0,16,0,0" Spacing="6">
             <TextBlock Text="Community" FontWeight="SemiBold" />
-            <Button Content="Open cosmonarchy.com" Command="{Binding OpenSiteCommand}"
-                    HorizontalAlignment="Left" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Open cosmonarchy.com" Command="{Binding OpenSiteCommand}" />
+                <Button Content="Join the Discord" Command="{Binding OpenDiscordCommand}" />
+            </StackPanel>
             <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                        TextWrapping="Wrap" />
         </StackPanel>

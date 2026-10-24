@@ -78,6 +78,7 @@ public sealed class InstallService
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         stager.Apply(_settings.Variant, _settings.NetcodeRole);
         progress?.Report($"Launching {_repo.Name}");
+        EnsureFullscreenDisplay(progress);
         await LaunchAsync(ct);
     }
 
@@ -99,6 +100,7 @@ public sealed class InstallService
         }
 
         progress?.Report($"Launching replay {Path.GetFileName(replayPath)}");
+        EnsureFullscreenDisplay(progress);
         await LaunchAsync(ct);
     }
 
@@ -259,6 +261,22 @@ public sealed class InstallService
             "Removed incomplete temp.mpq; the game rebuilds it now (black screen for about a minute — let it finish).");
     }
 
+    /// <summary>Force fullscreen for Play launches. cnc-ddraw reads ddraw.ini
+    /// from the game folder (next to the exe, or in the Starcraft dir), so the
+    /// display keys are set in both places. See <see cref="DisplayIni"/>.</summary>
+    private void EnsureFullscreenDisplay(IProgress<string>? progress)
+    {
+        progress?.Report("Setting fullscreen display");
+        foreach (var dir in new[] { RepoDir, StarcraftDir })
+        {
+            var path = Path.Combine(dir, "ddraw.ini");
+            if (File.Exists(path))
+                File.WriteAllText(path, DisplayIni.Patch(File.ReadAllText(path)));
+            else
+                File.WriteAllText(path, DisplayIni.Fullscreen);
+        }
+    }
+
     private async Task LaunchAsync(CancellationToken ct)
     {
         if (OperatingSystem.IsWindows())
@@ -272,10 +290,6 @@ public sealed class InstallService
             await WaitForStarcraftWindowAsync(ct);
             return;
         }
-
-        // Linux: umu + GE-Proton in the shared prefix. Disable the handheld
-        // panel when docked so Xwayland presents one clean 1080p screen.
-        DisableHandheldPanelWhenDocked();
 
         var startInfo = new ProcessStartInfo("umu-run")
         {
@@ -292,36 +306,6 @@ public sealed class InstallService
         startInfo.Environment["PROTON_VERB"] = "waitforexitandrun";
         Process.Start(startInfo);
         await Task.Delay(Timeout.InfiniteTimeSpan, ct);
-    }
-
-    private static void DisableHandheldPanelWhenDocked()
-    {
-        try
-        {
-            var start = new ProcessStartInfo("hyprctl", "monitors -j")
-            {
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-            };
-            using var proc = Process.Start(start);
-            if (proc is null)
-                return;
-            var json = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(5000);
-            if (json.Contains("HDMI-A-1", StringComparison.Ordinal) &&
-                !json.Contains("\"disabled\":true", StringComparison.Ordinal))
-            {
-                Process.Start(new ProcessStartInfo("hyprctl")
-                {
-                    UseShellExecute = false,
-                    ArgumentList = { "eval", "hl.monitor({output='eDP-1', disabled=true})" },
-                });
-            }
-        }
-        catch
-        {
-            // Not Hyprland (or hyprctl missing): nothing to do.
-        }
     }
 
     private static async Task WaitForStarcraftWindowAsync(CancellationToken ct)
