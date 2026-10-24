@@ -1088,4 +1088,39 @@ public class CoreTests
             "daf2a27", "Prerelease", [], "uploader", "file");
         Assert.Equal("daf2a27 (Prerelease)", prerelease.VersionLabel);
     }
+
+    [Theory]
+    [InlineData(0, "0 B")]
+    [InlineData(512, "512 B")]
+    [InlineData(2048, "2.0 KB")]
+    [InlineData(5 * 1024 * 1024, "5.0 MB")]
+    [InlineData(1536L * 1024 * 1024, "1.5 GB")]
+    public void HttpDownload_formats_bytes(long bytes, string expected) =>
+        Assert.Equal(expected, HttpDownload.FormatBytes(bytes));
+
+    [Fact]
+    public void HttpDownload_messages_carry_percentage_and_totals()
+    {
+        Assert.Equal(
+            "Downloading StarCraft… 41% (430.0 MB / 1.0 GB)",
+            HttpDownload.Message("Downloading StarCraft", 430 * 1024 * 1024, 1024L * 1024 * 1024));
+        // No known total: byte count only, no percentage.
+        Assert.Equal(
+            "Downloading CrownLink… 12.0 KB",
+            HttpDownload.Message("Downloading CrownLink", 12 * 1024, 0));
+    }
+
+    [Theory]
+    [InlineData("Downloading StarCraft… 43% (512 MB / 1.2 GB)", 43d)]
+    [InlineData("Downloading patch VcRedist… 100% (100 B / 100 B)", 100d)]
+    [InlineData("Fetching https://gitlab.com/… 128 MB · 2,041 / 4,512 objects", null)]
+    [InlineData("Done.", null)]
+    public void HttpDownload_parses_percentages(string message, double? expected)
+    {
+        var parsed = HttpDownload.PercentOf(message);
+        if (expected is null)
+            Assert.Null(parsed);
+        else
+            Assert.Equal(expected, parsed);
+    }
 }

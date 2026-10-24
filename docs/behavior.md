@@ -77,6 +77,17 @@ Order of operations, each reported to the UI:
 6. **Wine.** When running under Wine, set `HKCU\Software\Wine\DllOverrides`
    `ddraw = native,builtin`.
 
+### Download progress
+
+Every download reports throttled progress (twice a second or every 512 KiB,
+plus a final report) as `Label… N% (X MB / Y MB)`. The Play page, both online
+Replays tabs, the Local files tab, and the Settings update flow show a
+determinate progress bar driven by that percentage; git clones/fetches (which
+cannot know their size up front) report bytes + objects instead
+(`Fetching <url>… 128 MB · 2,041 / 4,512 objects`) and show an indeterminate
+bar. Responses that are gzip-encoded or carry no content length report bytes
+only — a percentage against the compressed size would be wrong.
+
 Version management: the Play page lists every installed version; Play, Update,
 and Delete act on the selected one, and Install always creates a *new* version
 (never touching existing checkouts). An install either tracks the repo's
