@@ -25,7 +25,7 @@ the Avalonia UI is scaffolded but not yet wired.
 | Play + variants (Original/Plus/Netcode) | Working (Linux launch via `umu-run`; Windows path written) |
 | Patch pipeline (StarCraft, patches.yml, CrownLink) | Working (smoke tested) |
 | Account + community | cosmonarchy.com device login, profile, website and Discord links |
-| Replays tab | OG/Plus online lists with per-tab search, race/matchup and team-size filters, follow players; desynced games flagged red; favourites with add dates, watched history, private/shared notes with tags, named + titled saved lists; watch any game in one click |
+| Replays tab | OG/Plus online lists with per-tab search, race/matchup and team-size filters, follow players, show-more paging; desynced games flagged red; favourites with add dates, watched history, private/shared notes with tags, named + titled saved lists; Following tab groups everyone you follow with their OG/Plus games; watch any game in one click |
 | Favourites tab | The local library: favourites (watched/new split), notes, saved lists, share/import (Discord-ready messages, files, webhook) |
 | Community tab | Public share board on a GitHub repo — browse, import, publish and unpublish shares stamped with your Discord name |
 | Self-updater | In-app: Settings → Check for updates → Install update; downloads the release asset, swaps the install and restarts (directory installs on Linux, single-file exe on Windows; AppImage/package installs open the release page) |

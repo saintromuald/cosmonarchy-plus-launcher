@@ -52,12 +52,46 @@ public partial class RacePairOption : ObservableObject
     };
 }
 
+/// <summary>One followed player for the Following tab, with how many of
+/// their games are in each channel.</summary>
+public sealed record FollowedRow(string Name, int OgCount, int PlusCount)
+{
+    public string OgLabel => OgCount.ToString();
+    public string PlusLabel => PlusCount.ToString();
+
+    public string ChannelLabel =>
+        OgCount > 0 && PlusCount > 0 ? "OG + Plus"
+        : OgCount > 0 ? "OG"
+        : PlusCount > 0 ? "Plus"
+        : "no games";
+}
+
+/// <summary>One replay of a followed player, with the channel it belongs to.</summary>
+public sealed record FollowedReplayRow(
+    OnlineMatch Match, ReplayChannel Channel, bool Favorite, bool Watched, bool HasNote, bool Desynced)
+{
+    public string PlayersLabel => Match.PlayersLabel;
+    public string DateLabel => Match.DateLabel;
+    public string MapName => Match.MapName;
+    public string DurationLabel => Match.DurationLabel;
+    public string VersionLabel => Match.VersionLabel;
+
+    public string ChannelLabel => Channel == ReplayChannel.Plus ? "Plus" : "OG";
+
+    public string Badges => string.Concat(
+        Favorite ? "★ " : "",
+        Watched ? "▶ " : "",
+        HasNote ? "✎ " : "",
+        Desynced ? "⚠ " : "");
+}
+
 public partial class ReplaysViewModel : ViewModelBase
 {
     public const string AllPlayers = "All players";
 
     private const int LatestCount = 20;
     private const int FilteredCount = 100;
+    private const int ShowMoreStep = 200;
 
     private readonly AppSettings _settings = AppRuntime.Settings;
     private readonly ReplayKrakenService _kraken = new();
@@ -130,6 +164,36 @@ public partial class ReplaysViewModel : ViewModelBase
 
     [ObservableProperty] private string _newPlayer = "";
 
+    // ---- Following tab ----------------------------------------------------
+
+    public ObservableCollection<FollowedRow> FollowedPlayers { get; } = new();
+    public ObservableCollection<FollowedReplayRow> FollowedMatches { get; } = new();
+
+    [ObservableProperty] private FollowedRow? _selectedFollowed;
+    [ObservableProperty] private FollowedReplayRow? _selectedFollowedMatch;
+    [ObservableProperty] private string _followedStatus =
+        "Follow players here or on the OG/Plus tabs; their games from both channels appear below.";
+    [ObservableProperty] private bool _followedBusy;
+
+    public bool CanWatchFollowed => !FollowedBusy && SelectedFollowedMatch is not null;
+    public bool CanUnfollowSelected => SelectedFollowed is not null;
+
+    partial void OnSelectedFollowedChanged(FollowedRow? value)
+    {
+        OnPropertyChanged(nameof(CanUnfollowSelected));
+        RebuildFollowedMatches();
+    }
+
+    partial void OnSelectedFollowedMatchChanged(FollowedReplayRow? value)
+    {
+        OnPropertyChanged(nameof(CanWatchFollowed));
+        if (value is not null)
+            ShowNote(value.Match);
+    }
+
+    partial void OnFollowedBusyChanged(bool value) =>
+        OnPropertyChanged(nameof(CanWatchFollowed));
+
     // ---- Cosmonarchy OG ---------------------------------------------------
 
     public ObservableCollection<ReplayRow> OgMatches { get; } = new();
@@ -140,6 +204,8 @@ public partial class ReplaysViewModel : ViewModelBase
     [ObservableProperty] private string _ogStatus = "Loading the latest games…";
     [ObservableProperty] private string _ogHint = "";
     [ObservableProperty] private bool _ogBusy;
+    [ObservableProperty] private int _ogVisible = LatestCount;
+    [ObservableProperty] private bool _canShowMoreOg;
 
     public bool CanWatchOg => !OgBusy && SelectedOgRow is not null;
     public bool CanUnfollowOg => !OgBusy && OgPlayer != AllPlayers;
@@ -154,6 +220,8 @@ public partial class ReplaysViewModel : ViewModelBase
     [ObservableProperty] private string _plusStatus = "Loading the latest games…";
     [ObservableProperty] private string _plusHint = "";
     [ObservableProperty] private bool _plusBusy;
+    [ObservableProperty] private int _plusVisible = LatestCount;
+    [ObservableProperty] private bool _canShowMorePlus;
 
     public bool CanWatchPlus => !PlusBusy && SelectedPlusRow is not null;
     public bool CanUnfollowPlus => !PlusBusy && PlusPlayer != AllPlayers;
@@ -201,6 +269,8 @@ public partial class ReplaysViewModel : ViewModelBase
     partial void OnFavoritesOnlyChanged(bool value) => ReapplyFilters();
     partial void OnWatchedOnlyChanged(bool value) => ReapplyFilters();
     partial void OnWithNotesOnlyChanged(bool value) => ReapplyFilters();
+    partial void OnOgVisibleChanged(int value) => ReapplyFilters();
+    partial void OnPlusVisibleChanged(int value) => ReapplyFilters();
 
     partial void OnOgBusyChanged(bool value)
     {
@@ -248,6 +318,7 @@ public partial class ReplaysViewModel : ViewModelBase
         }
         NewPlayer = "";
         RebuildPlayers();
+        RebuildFollowed();
         ReapplyFilters();
     }
 
@@ -257,13 +328,17 @@ public partial class ReplaysViewModel : ViewModelBase
     [RelayCommand]
     private void UnfollowPlus() => Unfollow(PlusPlayer);
 
+    [RelayCommand]
+    private void UnfollowSelected() => Unfollow(SelectedFollowed?.Name ?? "");
+
     private void Unfollow(string player)
     {
-        if (player == AllPlayers)
+        if (player == AllPlayers || player.Length == 0)
             return;
         _settings.FollowedPlayers.RemoveAll(p => p.Equals(player, StringComparison.OrdinalIgnoreCase));
         _settings.Save();
         RebuildPlayers();
+        RebuildFollowed();
         ReapplyFilters();
     }
 
@@ -277,6 +352,142 @@ public partial class ReplaysViewModel : ViewModelBase
             Players.Add(name);
         OgPlayer = Players.Contains(og) ? og : AllPlayers;
         PlusPlayer = Players.Contains(plus) ? plus : AllPlayers;
+    }
+
+    // ---- Following tab ----------------------------------------------------
+
+    /// <summary>Rebuilds the followed-player list with per-channel game
+    /// counts, so OG and Plus followers are told apart.</summary>
+    private void RebuildFollowed()
+    {
+        static void Count(Dictionary<string, (int Og, int Plus)> counts, IEnumerable<OnlineMatch> matches, bool plus)
+        {
+            foreach (var match in matches)
+            {
+                foreach (var name in FollowedNames(match))
+                {
+                    counts.TryGetValue(name, out var existing);
+                    if (plus)
+                        existing.Plus++;
+                    else
+                        existing.Og++;
+                    counts[name] = existing;
+                }
+            }
+        }
+
+        var counts = new Dictionary<string, (int Og, int Plus)>(StringComparer.OrdinalIgnoreCase);
+        Count(counts, _ogAll, plus: false);
+        Count(counts, _plusAll, plus: true);
+
+        var previous = SelectedFollowed?.Name;
+        FollowedPlayers.Clear();
+        foreach (var name in _settings.FollowedPlayers.OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
+        {
+            counts.TryGetValue(name, out var c);
+            FollowedPlayers.Add(new FollowedRow(name, c.Og, c.Plus));
+        }
+        SelectedFollowed = FollowedPlayers.FirstOrDefault(f =>
+                f.Name.Equals(previous, StringComparison.OrdinalIgnoreCase))
+            ?? FollowedPlayers.FirstOrDefault();
+        RebuildFollowedMatches();
+    }
+
+    private static IEnumerable<string> FollowedNames(OnlineMatch match)
+    {
+        yield return match.UploaderName;
+        foreach (var player in match.Players)
+            yield return player.Name;
+    }
+
+    private void RebuildFollowedMatches()
+    {
+        var previous = SelectedFollowedMatch?.Match.MatchUuid;
+        FollowedMatches.Clear();
+        if (SelectedFollowed is not { } followed)
+        {
+            FollowedStatus = FollowedPlayers.Count == 0
+                ? "Follow players here or on the OG/Plus tabs; their games from both channels appear below."
+                : "Select a player above to see their games.";
+            return;
+        }
+
+        var rows = _ogAll.Where(m => MatchHasPlayer(m, followed.Name))
+            .Select(m => new FollowedReplayRow(m, ReplayChannel.Original, false, false, false, m.HasDesync))
+            .Concat(_plusAll.Where(m => MatchHasPlayer(m, followed.Name))
+                .Select(m => new FollowedReplayRow(m, ReplayChannel.Plus, false, false, false, m.HasDesync)))
+            .OrderByDescending(r => r.Match.UploadedAt)
+            .ToList();
+
+        foreach (var row in rows)
+        {
+            var match = row.Match;
+            var note = _library.NoteFor(match.MatchUuid);
+            FollowedMatches.Add(row with
+            {
+                Favorite = _library.IsFavorite(match.MatchUuid),
+                Watched = _library.WasWatched(match.MatchUuid),
+                HasNote = note is { Text.Length: > 0 } || (note?.Tags.Count ?? 0) > 0,
+            });
+        }
+        SelectedFollowedMatch = FollowedMatches.FirstOrDefault(r =>
+                r.Match.MatchUuid.Equals(previous, StringComparison.OrdinalIgnoreCase))
+            ?? FollowedMatches.FirstOrDefault();
+        FollowedStatus = $"{FollowedMatches.Count} game(s) by {followed.Name} across both channels.";
+    }
+
+    [RelayCommand]
+    private async Task WatchFollowedAsync() => await WatchFollowedRowAsync(SelectedFollowedMatch);
+
+    [RelayCommand]
+    private async Task DownloadFollowedAsync() => await DownloadFollowedRowAsync(SelectedFollowedMatch);
+
+    private async Task WatchFollowedRowAsync(FollowedReplayRow? row)
+    {
+        if (row is null)
+            return;
+        FollowedBusy = true;
+        try
+        {
+            var progress = new Progress<string>(s => FollowedStatus = s);
+            FollowedStatus = "Working out the build…";
+            var build = await Task.Run(() => _watch.WatchAsync(row.Match, progress, CancellationToken.None));
+            _library.MarkWatched(row.Match.MatchUuid, row.Match.FileId, row.Match.VersionLabel);
+            AppRuntime.SaveLibrary();
+            FollowedStatus = $"Launched {row.Match.FileName} on {build.Label} {build.FullSha[..8]}.";
+            RebuildFollowed();
+            ShowNote(row.Match);
+        }
+        catch (Exception ex)
+        {
+            FollowedStatus = $"Could not watch: {ex.Message}";
+        }
+        finally
+        {
+            FollowedBusy = false;
+        }
+    }
+
+    private async Task DownloadFollowedRowAsync(FollowedReplayRow? row)
+    {
+        if (row is null)
+            return;
+        FollowedBusy = true;
+        try
+        {
+            var progress = new Progress<string>(s => FollowedStatus = s);
+            var path = await _kraken.DownloadReplayAsync(row.Match, ReplayRoot, progress);
+            FollowedStatus = $"Saved {Path.GetFileName(path)} to {ReplayRoot}.";
+            RefreshList();
+        }
+        catch (Exception ex)
+        {
+            FollowedStatus = $"Download failed: {ex.Message}";
+        }
+        finally
+        {
+            FollowedBusy = false;
+        }
     }
 
     // ---- Library: notes, favourites, watched ------------------------------
@@ -294,6 +505,7 @@ public partial class ReplaysViewModel : ViewModelBase
         SelectedSavedList = SavedLists.FirstOrDefault(l => l.Id == listId) ?? SavedLists.FirstOrDefault();
         SelectedAddList = SavedLists.FirstOrDefault(l => l.Id == addId);
         ReapplyFilters();
+        RebuildFollowed();
         if (NoteMatch is not null)
             ShowNote(NoteMatch);
     }
@@ -573,6 +785,12 @@ public partial class ReplaysViewModel : ViewModelBase
     private Task RefreshOnlineAsync() => LoadOnlineAsync(force: true);
 
     [RelayCommand]
+    private void ShowMoreOg() => OgVisible += ShowMoreStep;
+
+    [RelayCommand]
+    private void ShowMorePlus() => PlusVisible += ShowMoreStep;
+
+    [RelayCommand]
     private async Task WatchOgAsync() => await WatchAsync(SelectedOgRow?.Match, isPlus: false);
 
     [RelayCommand]
@@ -656,6 +874,7 @@ public partial class ReplaysViewModel : ViewModelBase
             _ogAll = og;
             _plusAll = plus;
             ReapplyFilters();
+            RebuildFollowed();
             if (_plusAll.Count == 0)
                 PlusStatus = "No Cosmonarchy Plus games found yet — play a Plus build online and it appears here.";
         }
@@ -708,8 +927,15 @@ public partial class ReplaysViewModel : ViewModelBase
 
         var filtered = !BuildFilters().IsDefault || player != AllPlayers ||
                        !string.IsNullOrWhiteSpace(search);
-        var limit = filtered ? FilteredCount : LatestCount;
-        var list = matches.OrderByDescending(m => m.UploadedAt).Take(limit).ToList();
+        var baseline = filtered ? FilteredCount : LatestCount;
+        var visible = channel == ReplayChannel.Plus ? PlusVisible : OgVisible;
+        var all = matches.OrderByDescending(m => m.UploadedAt).ToList();
+        var list = all.Take(Math.Max(baseline, visible)).ToList();
+        var canShowMore = list.Count < all.Count;
+        if (channel == ReplayChannel.Plus)
+            CanShowMorePlus = canShowMore;
+        else
+            CanShowMoreOg = canShowMore;
 
         var previous = channel == ReplayChannel.Plus
             ? SelectedPlusRow?.Match.MatchUuid
@@ -736,12 +962,13 @@ public partial class ReplaysViewModel : ViewModelBase
             SelectedOgRow = restored ?? target.FirstOrDefault();
 
         var name = channel == ReplayChannel.Plus ? "Cosmonarchy Plus" : "Cosmonarchy OG";
-        var total = channel == ReplayChannel.Plus ? _plusAll.Count : _ogAll.Count;
-        var status = $"{list.Count} shown · {total} {name} games";
+        var status = $"{list.Count} shown · {all.Count} {name} games";
         if (player != AllPlayers)
             status += $" · {player}";
         if (!string.IsNullOrWhiteSpace(search))
             status += $" · “{search.Trim()}”";
+        if (canShowMore)
+            status += " · press “Show more” for the rest";
         SetStatus(channel == ReplayChannel.Plus, status + ".");
     }
 

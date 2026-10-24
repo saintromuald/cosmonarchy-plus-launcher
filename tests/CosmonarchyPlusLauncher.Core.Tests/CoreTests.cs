@@ -981,6 +981,31 @@ public class CoreTests
     }
 
     [Fact]
+    public void AccountService_fixes_the_staging_auth_redirect()
+    {
+        const string url =
+            "https://discord.com/api/oauth2/authorize?client_id=1365001746597941350" +
+            "&redirect_uri=https%3A%2F%2Fstars.veeq7.com%2Fapi%2Fauth%2Fcallback" +
+            "&response_type=code&scope=identify%20email&state=4e2dff0f-ec78-4290";
+
+        var fixedUrl = AccountService.FixAuthUrl(url);
+
+        Assert.Contains("redirect_uri=https%3A%2F%2Fcosmonarchy.com%2Fapi%2Fauth%2Fcallback", fixedUrl);
+        Assert.Contains("state=4e2dff0f-ec78-4290", fixedUrl);
+        Assert.Contains("scope=identify%20email", fixedUrl);
+        Assert.DoesNotContain("stars.veeq7.com", fixedUrl);
+
+        // A production redirect (and any other part of the URL) is untouched.
+        Assert.Equal(
+            url.Replace("stars.veeq7.com", "cosmonarchy.com"),
+            AccountService.FixAuthUrl(url.Replace("stars.veeq7.com", "cosmonarchy.com")));
+
+        // Non-Discord URLs and garbage pass through.
+        Assert.Equal("https://example.com/x", AccountService.FixAuthUrl("https://example.com/x"));
+        Assert.Equal("not a url", AccountService.FixAuthUrl("not a url"));
+    }
+
+    [Fact]
     public async Task SelfUpdater_refuses_to_prepare_for_unmanaged_installs()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"cpl-noinst-{Guid.NewGuid():N}");
