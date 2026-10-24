@@ -52,15 +52,40 @@ public partial class PlayViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanInstall))]
     [NotifyPropertyChangedFor(nameof(CanPlay))]
+    [NotifyPropertyChangedFor(nameof(ProgressIndeterminate))]
     private bool _busy;
 
     [ObservableProperty]
     private string _status = "Select a repository and version, then install or play.";
 
+    /// <summary>Download progress as a fraction (0-1), or -1 while nothing
+    /// is downloading. Status messages carry "NN%"; this feeds the bar.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DownloadPercent))]
+    [NotifyPropertyChangedFor(nameof(ProgressIndeterminate))]
+    private double _downloadFraction = -1;
+
+    public double DownloadPercent => DownloadFraction < 0 ? 0 : DownloadFraction * 100;
+
+    /// <summary>An indeterminate bar while busy work (git fetches, unpacking)
+    /// runs without a byte percentage.</summary>
+    public bool ProgressIndeterminate => Busy && DownloadFraction < 0;
+
     /// <summary>True when the hidden Remastered launch is unlocked AND the
     /// private bundle exists on this machine (see RemasteredAccess).</summary>
     [ObservableProperty]
     private bool _remasteredVisible;
+
+    /// <summary>Unlock affordance (visible until unlocked): password box,
+    /// Unlock button, status. Unlocking reveals the Play Remastered button.</summary>
+    [ObservableProperty]
+    private string _remasteredPassword = "";
+
+    [ObservableProperty]
+    private string _remasteredStatus = "";
+
+    [ObservableProperty]
+    private bool _showRemasteredUnlock = true;
 
     private string? _pendingDeleteId;
     private int _loadToken;
@@ -71,6 +96,8 @@ public partial class PlayViewModel : ViewModelBase
     public PlayViewModel()
     {
         _showUnofficial = _settings.ShowUnofficialRepos;
+        RemasteredVisible = RemasteredAccess.IsUnlocked(_settings);
+        ShowRemasteredUnlock = !RemasteredVisible;
         RebuildRepos();
         SelectedRepo = RepoCatalog.Find(_settings.SelectedRepoId) ?? Repos.FirstOrDefault();
         ReloadInstalled();
@@ -165,6 +192,19 @@ public partial class PlayViewModel : ViewModelBase
     {
         RemasteredAccess.Launch(_settings, out var status);
         Status = status;
+    }
+
+    /// <summary>Verify the unlock password and (re)install the private bundle.</summary>
+    [RelayCommand]
+    private void UnlockRemastered()
+    {
+        RemasteredStatus = RemasteredAccess.TryUnlock(_settings, RemasteredPassword);
+        if (!RemasteredStatus.StartsWith("Wrong password", StringComparison.Ordinal))
+        {
+            RemasteredPassword = "";
+            RemasteredVisible = RemasteredAccess.IsUnlocked(_settings);
+            ShowRemasteredUnlock = !RemasteredVisible;
+        }
     }
 
     private void LoadSources()
@@ -325,7 +365,12 @@ public partial class PlayViewModel : ViewModelBase
     {
         Busy = true;
         Status = "Working…";
-        var progress = new Progress<string>(s => Status = s);
+        DownloadFraction = -1;
+        var progress = new Progress<string>(s =>
+        {
+            Status = s;
+            DownloadFraction = HttpDownload.PercentOf(s) is { } percent ? percent / 100 : -1;
+        });
         try
         {
             await Task.Run(() => action(progress, CancellationToken.None));
@@ -338,6 +383,7 @@ public partial class PlayViewModel : ViewModelBase
         finally
         {
             Busy = false;
+            DownloadFraction = -1;
         }
     }
 
