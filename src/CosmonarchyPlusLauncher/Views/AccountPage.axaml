@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CosmonarchyPlusLauncher.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="560"
+             x:Class="CosmonarchyPlusLauncher.Views.AccountPage"
+             x:DataType="vm:AccountViewModel">
+
+    <Grid Margin="16" RowDefinitions="Auto,Auto,*">
+
+        <TextBlock Grid.Row="0" Text="Account" FontSize="20" FontWeight="SemiBold" />
+
+        <Panel Grid.Row="1" Margin="0,12,0,0">
+            <StackPanel Spacing="8" IsVisible="{Binding IsLoggedIn}">
+                <TextBlock Text="{Binding User.Name, TargetNullValue='—'}" FontSize="16" />
+                <TextBlock Text="{Binding DiscordDisplay}" />
+                <Grid ColumnDefinitions="Auto,Auto,Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding User.MatchesPlayed, StringFormat='Matches: {0}'}" Margin="0,0,16,0" />
+                    <TextBlock Grid.Column="1" Text="{Binding User.MatchesWon, StringFormat='Won: {0}'}" Margin="0,0,16,0" />
+                    <TextBlock Grid.Column="2" Text="{Binding User.Mmr, StringFormat='MMR: {0}'}" />
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+                    <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+                    <Button Content="Log out" Command="{Binding LogoutCommand}" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Spacing="8" IsVisible="{Binding !IsLoggedIn}">
+                <TextBlock Text="Link your cosmonarchy.com account to see your profile here. The login happens in your browser; the launcher only stores the token it receives."
+                           TextWrapping="Wrap" />
+                <Button Content="Link account" Command="{Binding LoginCommand}"
+                        IsEnabled="{Binding !Busy}" HorizontalAlignment="Left" MinWidth="120" />
+            </StackPanel>
+        </Panel>
+
+        <StackPanel Grid.Row="2" Margin="0,16,0,0" Spacing="6">
+            <TextBlock Text="Community" FontWeight="SemiBold" />
+            <Button Content="Open cosmonarchy.com" Command="{Binding OpenSiteCommand}"
+                    HorizontalAlignment="Left" />
+            <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+    </Grid>
+
+</UserControl>

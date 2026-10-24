@@ -1,0 +1,112 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet build
+      - run: dotnet test
+
+  linux:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet publish src/CosmonarchyPlusLauncher -c Release -r linux-x64 --self-contained true -o out/linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: out/linux
+
+  windows:
+    runs-on: windows-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet publish src/CosmonarchyPlusLauncher -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o out/win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-x64
+          path: out/win
+
+  appimage:
+    runs-on: ubuntu-latest
+    needs: linux
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-x64
+          path: out/linux
+      - name: Assemble AppDir
+        run: |
+          set -eux
+          mkdir -p AppDir/usr/bin AppDir/usr/share/icons/hicolor/256x256/apps AppDir/usr/share/applications
+          cp -r out/linux/* AppDir/usr/bin/
+          cp packaging/linux/cosmonarchy-plus-launcher.desktop AppDir/usr/share/applications/
+          cp packaging/linux/cosmonarchy-plus-launcher.png AppDir/usr/share/icons/hicolor/256x256/apps/
+          cp packaging/linux/cosmonarchy-plus-launcher.png AppDir/
+          cat > AppDir/AppRun <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/bin/CosmonarchyPlusLauncher" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+      - name: Build AppImage
+        run: |
+          set -eux
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir CosmonarchyPlusLauncher-x86_64.AppImage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: CosmonarchyPlusLauncher-x86_64.AppImage
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, appimage]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-x64
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: win-x64
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: appimage
+          path: dist
+      - name: Zip payloads
+        run: |
+          cd dist
+          7z a -tzip CosmonarchyPlusLauncher-win-x64.zip ./win-x64/* >/dev/null || true
+          tar -czf CosmonarchyPlusLauncher-linux-x64.tar.gz linux-x64 || true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/CosmonarchyPlusLauncher-win-x64.zip
+            dist/CosmonarchyPlusLauncher-linux-x64.tar.gz
+            dist/*.AppImage

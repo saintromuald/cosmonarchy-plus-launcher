@@ -8,15 +8,16 @@
 - [x] Variant staging + launch (Linux umu; Windows path written, untested)
 - [x] Account API client
 - [x] Settings persistence
+- [x] Smoke tests: live prefix + throwaway full pipeline (`tools/Smoke`)
 - [ ] Port `cosmo-tempmpq-ensure` (truncated temp.mpq healing)
 - [ ] First real install test against the existing `~/Games/cosmonarchy` prefix
 
 ## M1 — UI
 
-- [ ] Play page: repo picker, version log, install/play buttons, progress
-- [ ] Settings page: root path, variant, role, action-on-play, log depth
-- [ ] Account page: login flow, profile stats, social links
-- [ ] Replays page: list + launch
+- [x] Play page: repo picker, version log, install/play buttons, progress
+- [x] Settings page: root path, variant, role, action-on-play, log depth, updates
+- [x] Account page: login flow, profile stats, community link
+- [x] Replays page: list + open folder (deep-link launch in M4)
 
 ## M2 — Windows parity
 
@@ -26,11 +27,11 @@
 
 ## M3 — Distribution
 
-- [ ] GitHub Actions: win-x64 single-file exe
-- [ ] Arch package (PKGBUILD) for Omarchy
-- [ ] AppImage
+- [x] GitHub Actions: build/test, win-x64 single-file exe, linux-x64, AppImage
+- [x] Arch package (PKGBUILD) for Omarchy
+- [x] AppImage recipe
 - [ ] Flatpak (stretch)
-- [ ] Self-updater from GitHub Releases
+- [x] Self-updater from GitHub Releases
 
 ## M4 — Replace the scripts
 

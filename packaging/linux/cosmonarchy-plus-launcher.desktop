@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Cosmonarchy Plus Launcher
+GenericName=Cosmonarchy launcher
+Comment=Install, update, and play Cosmonarchy BW — Linux and Windows
+Exec=CosmonarchyPlusLauncher
+Icon=cosmonarchy-plus-launcher
+Terminal=false
+Categories=Game;Utility;
+Keywords=Cosmonarchy;Fraud;Launcher;Update;Install;Starcraft;
+StartupNotify=true

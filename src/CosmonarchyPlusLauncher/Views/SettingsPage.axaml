@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CosmonarchyPlusLauncher.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="560"
+             x:Class="CosmonarchyPlusLauncher.Views.SettingsPage"
+             x:DataType="vm:SettingsViewModel">
+
+    <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
+
+        <TextBlock Grid.Row="0" Text="Settings" FontSize="20" FontWeight="SemiBold" />
+
+        <Grid Grid.Row="1" ColumnDefinitions="140,*" Margin="0,12,0,0">
+            <TextBlock Grid.Column="0" Text="Install root" VerticalAlignment="Center" />
+            <TextBox Grid.Column="1" Text="{Binding RootPath}" Watermark="C:\Cosmonarchy\ or the Wine drive_c path" />
+        </Grid>
+
+        <Grid Grid.Row="2" ColumnDefinitions="140,*" Margin="0,8,0,0">
+            <TextBlock Grid.Column="0" Text="Wine prefix root" VerticalAlignment="Center" />
+            <TextBox Grid.Column="1" Text="{Binding LinuxPrefixRoot}"
+                     Watermark="Linux only: ~/Games/cosmonarchy" />
+        </Grid>
+
+        <Grid Grid.Row="3" ColumnDefinitions="140,*" Margin="0,8,0,0">
+            <TextBlock Grid.Column="0" Text="After pressing Play" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding ActionOnPlayOptions}"
+                      SelectedItem="{Binding ActionOnPlay}" HorizontalAlignment="Left"
+                      MinWidth="180" />
+        </Grid>
+
+        <CheckBox Grid.Row="4" Content="Keep the full version log (no shallow history)"
+                  IsChecked="{Binding FullVersionLog}" Margin="0,10,0,0" />
+
+        <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="8" Margin="0,14,0,0">
+            <Button Content="Save" Command="{Binding SaveCommand}" MinWidth="100" />
+            <Button Content="Restore defaults" Command="{Binding ResetDefaultsCommand}" />
+            <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="6" Orientation="Horizontal" Spacing="8" Margin="0,14,0,0">
+            <Button Content="Check for updates" Command="{Binding CheckForUpdatesCommand}" />
+            <TextBlock Text="{Binding UpdateStatus}" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="7" Text="Linux installs live inside the GE-Proton prefix (~/Games/cosmonarchy); the install root is its drive_c/Cosmonarchy directory."
+                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                   Margin="0,12,0,0" TextWrapping="Wrap" />
+    </Grid>
+
+</UserControl>

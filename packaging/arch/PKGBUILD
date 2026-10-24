@@ -1,0 +1,37 @@
+# Maintainer: saintromuald <saintromuald@users.noreply.github.com>
+# Clean-room, open-source Cosmonarchy BW launcher.
+pkgname=cosmonarchy-plus-launcher
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Open-source cross-platform launcher for Cosmonarchy BW (install, update, variants, patches, account)"
+arch=('x86_64')
+url="https://github.com/saintromuald/cosmonarchy-plus-launcher"
+license=('MIT')
+depends=('libx11' 'libice' 'libsm' 'fontconfig' 'hicolor-icon-theme')
+makedepends=('dotnet-sdk' 'git')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/saintromuald/cosmonarchy-plus-launcher/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$pkgname-$pkgver"
+  dotnet publish src/CosmonarchyPlusLauncher \
+    -c Release -r linux-x64 --self-contained true \
+    -o "$srcdir/publish"
+}
+
+package() {
+  install -d "$pkgdir/usr/lib/$pkgname"
+  cp -r "$srcdir/publish/." "$pkgdir/usr/lib/$pkgname/"
+
+  install -d "$pkgdir/usr/bin"
+  cat > "$pkgdir/usr/bin/$pkgname" <<EOF
+#!/bin/sh
+exec /usr/lib/$pkgname/CosmonarchyPlusLauncher "\$@"
+EOF
+  chmod +x "$pkgdir/usr/bin/$pkgname"
+
+  install -Dm644 "$srcdir/$pkgname-$pkgver/packaging/linux/cosmonarchy-plus-launcher.desktop" \
+    "$pkgdir/usr/share/applications/cosmonarchy-plus-launcher.desktop"
+  install -Dm644 "$srcdir/$pkgname-$pkgver/packaging/linux/cosmonarchy-plus-launcher.png" \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/cosmonarchy-plus-launcher.png"
+}

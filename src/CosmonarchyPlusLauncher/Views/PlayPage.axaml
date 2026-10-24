@@ -1,0 +1,69 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CosmonarchyPlusLauncher.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="560"
+             x:Class="CosmonarchyPlusLauncher.Views.PlayPage"
+             x:DataType="vm:PlayViewModel">
+
+    <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
+
+        <TextBlock Grid.Row="0" Text="Play" FontSize="20" FontWeight="SemiBold" />
+
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+            <ComboBox Grid.Column="0"
+                      ItemsSource="{Binding Repos}"
+                      SelectedItem="{Binding SelectedRepo}"
+                      DisplayMemberBinding="{Binding Name}"
+                      HorizontalAlignment="Stretch" />
+            <CheckBox Grid.Column="1" Content="Show unofficial mirrors"
+                      IsChecked="{Binding ShowUnofficial}" Margin="12,0,0,0"
+                      VerticalAlignment="Center" />
+        </Grid>
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+            <ComboBox Grid.Column="0"
+                      ItemsSource="{Binding Versions}"
+                      SelectedItem="{Binding SelectedVersion}"
+                      DisplayMemberBinding="{Binding Label}"
+                      HorizontalAlignment="Stretch" />
+            <Button Grid.Column="1" Content="Refresh versions"
+                    Command="{Binding RefreshCommand}" Margin="12,0,0,0" />
+        </Grid>
+
+        <Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,Auto" Margin="0,8,0,0">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Variant:" VerticalAlignment="Center" />
+                <ComboBox ItemsSource="{Binding Variants}"
+                          SelectedItem="{Binding Variant}" MinWidth="120" />
+                <TextBlock Text="Role:" VerticalAlignment="Center" />
+                <ComboBox ItemsSource="{Binding Roles}"
+                          SelectedItem="{Binding Role}" MinWidth="120" />
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="4" ColumnDefinitions="Auto,Auto,Auto" Margin="0,12,0,0">
+            <Button Grid.Column="0" Content="Install / Update" MinWidth="140"
+                    Command="{Binding InstallCommand}"
+                    IsEnabled="{Binding CanInstall}" />
+            <Button Grid.Column="1" Content="Play" MinWidth="140" Margin="12,0,0,0"
+                    Command="{Binding PlayCommand}"
+                    IsEnabled="{Binding CanInstall}" />
+            <Button Grid.Column="2" Content="Fetch full version log" MinWidth="160" Margin="12,0,0,0"
+                    Command="{Binding UnshallowCommand}"
+                    IsEnabled="{Binding CanInstall}" />
+        </Grid>
+
+        <Border Grid.Row="5" Margin="0,12,0,0" Padding="10"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                CornerRadius="4">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+        </Border>
+
+        <TextBlock Grid.Row="6" Text="Workspaces 11–20 are recorded by Recall; keep personal windows on 1–10."
+                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                   Margin="0,10,0,0" TextWrapping="Wrap" />
+    </Grid>
+
+</UserControl>
