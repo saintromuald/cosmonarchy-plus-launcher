@@ -19,7 +19,7 @@ public sealed class AccountService
     {
         var json = await GetJsonAsync("/api/auth", ct);
         var requestId = json.GetProperty("loginRequestId").GetString() ?? "";
-        var authUrl = FixAuthUrl(json.GetProperty("authUrl").GetString() ?? "");
+        var authUrl = json.GetProperty("authUrl").GetString() ?? "";
         return new LoginRequest(requestId, authUrl);
     }
 
