@@ -50,10 +50,16 @@ public sealed class RepoManager : IDisposable
 
     /// <summary>Returns the remote to use for fetch/reset, adding one named
     /// after the repo if the URL is not configured yet.</summary>
-    public string EnsureRemoteName()
+    public string EnsureRemoteName() => EnsureRemote(_url);
+
+    /// <summary>Name of the remote that points at <paramref name="url"/>,
+    /// adding one when missing. Used when one checkout carries both the fork
+    /// and upstream remotes.</summary>
+    public string EnsureRemote(string url)
     {
         var repo = Open();
-        var remote = FindMatchingRemote(repo);
+        var remote = repo.Network.Remotes.FirstOrDefault(r =>
+            string.Equals(Normalize(r.Url), Normalize(url), StringComparison.OrdinalIgnoreCase));
         if (remote is not null)
             return remote.Name;
 
@@ -61,7 +67,7 @@ public sealed class RepoManager : IDisposable
         var n = 1;
         while (repo.Network.Remotes[name] is not null)
             name = $"launcher{n++}";
-        repo.Network.Remotes.Add(name, _url);
+        repo.Network.Remotes.Add(name, url);
         return name;
     }
 
@@ -78,6 +84,13 @@ public sealed class RepoManager : IDisposable
     public void Fetch(IProgress<string>? progress = null)
     {
         var name = EnsureRemoteName();
+        FetchRemote(name, progress);
+    }
+
+    /// <summary>Fetch one configured remote by name (used when a checkout has
+    /// both the fork and upstream remotes and we need objects from either).</summary>
+    public void FetchRemote(string name, IProgress<string>? progress = null)
+    {
         var repo = Open();
         var remote = repo.Network.Remotes[name] ?? throw new InvalidOperationException($"Remote {name} disappeared from {_dir}");
         IEnumerable<string> refspecs = remote.FetchRefSpecs.Any()
@@ -130,6 +143,59 @@ public sealed class RepoManager : IDisposable
         repo.Reset(ResetMode.Hard, commit);
         foreach (var submodule in repo.Submodules)
             repo.Submodules.Update(submodule.Name, new SubmoduleUpdateOptions { Init = true });
+    }
+
+    /// <summary>Check out a commit without moving any branch. Used for pinned
+    /// versions and replay playback: moving the branch would rewrite a
+    /// developer's `plus` branch to an upstream or old commit.</summary>
+    public void CheckoutCommit(string sha, IProgress<string>? progress = null)
+    {
+        var repo = Open();
+        var commit = repo.Lookup<Commit>(sha)
+                     ?? throw new InvalidOperationException($"No such commit: {sha}");
+        progress?.Report($"Checking out {commit.Id.Sha[..8]}");
+        Commands.Checkout(repo, commit, new CheckoutOptions
+        {
+            CheckoutModifiers = CheckoutModifiers.Force,
+        });
+        foreach (var submodule in repo.Submodules)
+            repo.Submodules.Update(submodule.Name, new SubmoduleUpdateOptions { Init = true });
+    }
+
+    /// <summary>Resolve a full or abbreviated SHA to a commit in this repo.</summary>
+    public string? ResolveCommit(string shaPrefix)
+    {
+        var repo = Open();
+        try
+        {
+            var commit = repo.Lookup<Commit>(shaPrefix);
+            return commit?.Id.Sha;
+        }
+        catch (LibGit2SharpException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>True when <paramref name="shaPrefix"/> is reachable from any
+    /// ref under refs/remotes/<paramref name="remoteName"/>/. That is how the
+    /// online list tells the maintainer's Plus builds from upstream ones.</summary>
+    public bool IsInRemote(string shaPrefix, string remoteName)
+    {
+        var repo = Open();
+        var refs = repo.Refs
+            .Where(r => r.CanonicalName.StartsWith($"refs/remotes/{remoteName}/", StringComparison.Ordinal))
+            .Cast<Reference>()
+            .ToList();
+        if (refs.Count == 0)
+            return false;
+        var filter = new CommitFilter { IncludeReachableFrom = refs };
+        foreach (var commit in repo.Commits.QueryBy(filter))
+        {
+            if (commit.Sha.StartsWith(shaPrefix, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     public IReadOnlyList<CommitInfo> Log(int maxCount = 200)

@@ -25,6 +25,14 @@ public static class RepoCatalog
             Branch: "plus"
         ),
         new(
+            "prerelease-mine",
+            "Prerelease (My Build)",
+            "https://github.com/saintromuald/cosmonarchy-bw-prerelease.git",
+            RepoKind.Game,
+            BuildDir: "Prerelease",
+            Branch: "plus"
+        ),
+        new(
             "prerelease",
             "Prerelease (Upstream)",
             "https://gitlab.com/the-no-frauds-club/cosmonarchy-bw-prerelease.git",
