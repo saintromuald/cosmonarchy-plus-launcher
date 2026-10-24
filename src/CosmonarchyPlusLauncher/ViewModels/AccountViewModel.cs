@@ -2,6 +2,7 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CosmonarchyPlusLauncher.Core.Models;
+using CosmonarchyPlusLauncher.Core.Services;
 using CosmonarchyPlusLauncher.Services;
 
 namespace CosmonarchyPlusLauncher.ViewModels;
@@ -38,12 +39,24 @@ public partial class AccountViewModel : ViewModelBase
         try
         {
             var request = await AppRuntime.Account.StartLoginAsync();
-            OpenBrowser(request.AuthUrl);
-            Status = "Complete the login in your browser; this window will pick it up.";
-            var token = await AppRuntime.Account.PollLoginAsync(request.RequestId, TimeSpan.FromSeconds(1.5));
+            // The backend always uses stars.veeq7.com; try that first.
+            var token = await TryLoginAsync(request.AuthUrl, request.RequestId);
             if (string.IsNullOrEmpty(token))
             {
-                Status = "Login cancelled.";
+                // The raw URL failed (likely Discord rejected the staging
+                // redirect_uri). Retry with the production domain.
+                var fixedUrl = AccountService.FixAuthUrl(request.RawAuthUrl);
+                if (fixedUrl != request.AuthUrl)
+                {
+                    Status = "First attempt failed; retrying with a different callback…";
+                    var retryRequest = await AppRuntime.Account.StartLoginAsync();
+                    token = await TryLoginAsync(fixedUrl, retryRequest.RequestId);
+                }
+            }
+
+            if (string.IsNullOrEmpty(token))
+            {
+                Status = "Login cancelled or timed out.";
                 return;
             }
 
@@ -59,6 +72,24 @@ public partial class AccountViewModel : ViewModelBase
         finally
         {
             Busy = false;
+        }
+    }
+
+    private static async Task<string?> TryLoginAsync(string authUrl, string requestId)
+    {
+        OpenBrowser(authUrl);
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+            return await AppRuntime.Account.PollLoginAsync(requestId, TimeSpan.FromSeconds(1.5), cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        catch (Exception)
+        {
+            return null; // poll failed; caller will retry with fallback URL
         }
     }
 

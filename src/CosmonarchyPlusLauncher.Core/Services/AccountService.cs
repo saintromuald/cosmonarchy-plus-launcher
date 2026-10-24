@@ -19,8 +19,17 @@ public sealed class AccountService
     {
         var json = await GetJsonAsync("/api/auth", ct);
         var requestId = json.GetProperty("loginRequestId").GetString() ?? "";
-        var authUrl = json.GetProperty("authUrl").GetString() ?? "";
-        return new LoginRequest(requestId, authUrl);
+        var rawAuthUrl = json.GetProperty("authUrl").GetString() ?? "";
+        // The backend always points Discord at its staging domain
+        // (stars.veeq7.com). Most of the time the backend also uses that
+        // domain when exchanging the code, so both must match. Rewriting
+        // the redirect to cosmonarchy.com breaks the exchange (Discord
+        // requires an exact redirect_uri match between authorize and
+        // token-exchange calls), so prefer the raw URL. The FixAuthUrl
+        // variant is kept as a fallback just in case the backend ever
+        // switches its redirect_uri to the production domain.
+        var authUrl = rawAuthUrl;
+        return new LoginRequest(requestId, authUrl, rawAuthUrl);
     }
 
     /// <summary>The backend sometimes points Discord at its staging domain
@@ -29,7 +38,7 @@ public sealed class AccountService
     /// domains serve the same backend (the callback is identical), so rewrite
     /// the redirect to the production domain. The state (which ties the
     /// browser callback to the launcher's poll) is left untouched.</summary>
-    internal static string FixAuthUrl(string authUrl)
+    public static string FixAuthUrl(string authUrl)
     {
         try
         {
@@ -105,4 +114,4 @@ public sealed class AccountService
     }
 }
 
-public sealed record LoginRequest(string RequestId, string AuthUrl);
+public sealed record LoginRequest(string RequestId, string AuthUrl, string RawAuthUrl);
