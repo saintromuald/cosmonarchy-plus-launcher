@@ -25,7 +25,7 @@ public sealed class ReplayKrakenService
         _http = http ?? CreateHttpClient();
         _cacheFile = cacheFile ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "cosmonarchy-plus-launcher", "matches-cache.json");
+            "cosmonarchy-plus-launcher", "matches-cache-v2.json");
     }
 
     private static HttpClient CreateHttpClient()
@@ -148,12 +148,16 @@ public sealed class ReplayKrakenService
         if (info.ValueKind == JsonValueKind.Object &&
             info.TryGetProperty("teams", out var teams) && teams.ValueKind == JsonValueKind.Array)
         {
+            var teamIndex = 0;
             foreach (var team in teams.EnumerateArray())
             {
                 if (team.ValueKind != JsonValueKind.Object ||
                     !team.TryGetProperty("players", out var slots) ||
                     slots.ValueKind != JsonValueKind.Array)
+                {
+                    teamIndex++;
                     continue;
+                }
                 foreach (var p in slots.EnumerateArray())
                 {
                     if (p.ValueKind != JsonValueKind.Object)
@@ -165,8 +169,10 @@ public sealed class ReplayKrakenService
                         name,
                         GetString(p, "race"),
                         GetString(p, "type"),
-                        p.TryGetProperty("apm", out var apm) && apm.TryGetInt32(out var a) ? a : null));
+                        p.TryGetProperty("apm", out var apm) && apm.TryGetInt32(out var a) ? a : null,
+                        teamIndex));
                 }
+                teamIndex++;
             }
         }
 

@@ -242,6 +242,127 @@ public class CoreTests
     }
 
     [Fact]
+    public void ReplayQuery_classifies_team_sizes_and_ignores_non_human_slots()
+    {
+        OnlineMatch Match(params OnlinePlayer[] players) => new(
+            Guid.NewGuid().ToString(), DateTimeOffset.UtcNow, "Map", TimeSpan.FromMinutes(5),
+            "daf2a27", "Prerelease", players, "uploader", "file");
+
+        var one = Match(
+            new OnlinePlayer("a", "Zerg", "Human", 100, 0),
+            new OnlinePlayer("b", "Terran", "Human", 100, 1));
+        Assert.Equal("1v1", ReplayQuery.TeamSize(one, ignoreObservers: true));
+
+        var two = Match(
+            new OnlinePlayer("a", "Zerg", "Human", 100, 0),
+            new OnlinePlayer("b", "Terran", "Human", 100, 0),
+            new OnlinePlayer("c", "Protoss", "Human", 100, 1),
+            new OnlinePlayer("d", "Askosi", "Human", 100, 1));
+        Assert.Equal("2v2", ReplayQuery.TeamSize(two, ignoreObservers: true));
+
+        var observed = Match(
+            new OnlinePlayer("a", "Zerg", "Human", 100, 0),
+            new OnlinePlayer("b", "Terran", "Human", 100, 1),
+            new OnlinePlayer("obs", "Protoss", "Computer", 0, 2));
+        Assert.Equal("1v1", ReplayQuery.TeamSize(observed, ignoreObservers: true));
+        Assert.Equal("Other", ReplayQuery.TeamSize(observed, ignoreObservers: false));
+    }
+
+    [Fact]
+    public void ReplayQuery_matches_race_pairs_only_across_teams()
+    {
+        var match = new OnlineMatch(
+            "uuid", DateTimeOffset.UtcNow, "Map", TimeSpan.Zero, "daf2a27", "Prerelease",
+            [
+                new OnlinePlayer("z", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("t", "Terran", "Human", 100, 1),
+            ],
+            "uploader", "file");
+
+        ISet<string> Pairs(params string[] races) =>
+            races.Select(r => ReplayQuery.PairKey(r, r)).ToHashSet();
+
+        Assert.True(ReplayQuery.MatchesRacePairs(
+            match, new HashSet<string> { ReplayQuery.PairKey("Zerg", "Terran") }, true));
+        Assert.True(ReplayQuery.MatchesRacePairs(
+            match, new HashSet<string> { ReplayQuery.PairKey("Terran", "Zerg") }, true));
+        Assert.False(ReplayQuery.MatchesRacePairs(match, Pairs("Zerg"), true));
+        Assert.False(ReplayQuery.MatchesRacePairs(match, Pairs("Zerg", "Terran"), true));
+        Assert.True(ReplayQuery.MatchesRacePairs(match, new HashSet<string>(), true));
+    }
+
+    [Fact]
+    public void ReplayLibrary_round_trips_favorites_notes_and_watched_history()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-library-{Guid.NewGuid():N}.json");
+        try
+        {
+            var store = new ReplayLibraryStore(path);
+            var library = new ReplayLibrary();
+            Assert.True(library.ToggleFavorite("m1"));
+            Assert.True(library.IsFavorite("m1"));
+            Assert.False(library.ToggleFavorite("m1"));
+            library.MarkWatched("m1", "f1", "daf2a27");
+            library.SaveNote("m1", "great game", ["zvp", " finals "], NoteVisibility.Shared);
+            store.Save(library);
+
+            var loaded = store.Load();
+            Assert.True(loaded.IsFavorite("m1") == false); // toggled back off
+            Assert.True(loaded.WasWatched("m1"));
+            var note = loaded.NoteFor("m1");
+            Assert.NotNull(note);
+            Assert.Equal("great game", note!.Text);
+            Assert.Equal(["zvp", "finals"], note.Tags);
+            Assert.Equal(NoteVisibility.Shared, note.Visibility);
+
+            loaded.SaveNote("m1", "", [], NoteVisibility.Private);
+            Assert.Null(loaded.NoteFor("m1"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ReplaySharing_includes_shared_notes_only()
+    {
+        var list = new SavedReplayList
+        {
+            Name = "Best ZvT",
+            MatchUuids = ["m1", "m2"],
+            Filters = new ReplayFilters
+            {
+                RacePairs = [ReplayQuery.PairKey("Zerg", "Terran")],
+                TeamSizes = ["1v1"],
+            },
+        };
+        var matches = new[]
+        {
+            new OnlineMatch("m1", DateTimeOffset.UtcNow, "Aegis", TimeSpan.FromMinutes(10),
+                "daf2a27", "Prerelease",
+                [new OnlinePlayer("a", "Zerg", "Human", 100, 0),
+                 new OnlinePlayer("b", "Terran", "Human", 100, 1)],
+                "a", "f1"),
+            new OnlineMatch("m2", DateTimeOffset.UtcNow, "Lucidity", TimeSpan.FromMinutes(10),
+                "daf2a27", "Prerelease",
+                [new OnlinePlayer("c", "Zerg", "Human", 100, 0),
+                 new OnlinePlayer("d", "Terran", "Human", 100, 1)],
+                "c", "f2"),
+        };
+        var library = new ReplayLibrary();
+        library.SaveNote("m1", "watch the muta switch", ["muta"], NoteVisibility.Shared);
+        library.SaveNote("m2", "private thought", ["secret"], NoteVisibility.Private);
+
+        var json = ReplaySharing.ExportList(list, matches, library);
+        Assert.Contains("watch the muta switch", json);
+        Assert.Contains("\"muta\"", json);
+        Assert.DoesNotContain("private thought", json);
+        Assert.DoesNotContain("secret", json);
+        Assert.Contains(ReplayQuery.PairKey("Zerg", "Terran"), json);
+    }
+
+    [Fact]
     public void PluginStager_original_variant_removes_plus_and_disarms()
     {
         var tmp = Path.Combine(Path.GetTempPath(), $"cpl-stage-{Guid.NewGuid():N}");

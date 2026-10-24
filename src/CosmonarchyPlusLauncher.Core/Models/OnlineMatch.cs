@@ -2,8 +2,9 @@ using System.Text.Json.Serialization;
 
 namespace CosmonarchyPlusLauncher.Core.Models;
 
-/// <summary>One player slot in an uploaded replay.</summary>
-public sealed record OnlinePlayer(string Name, string Race, string Type, int? Apm);
+/// <summary>One player slot in an uploaded replay. <paramref name="Team"/> is
+/// the team array index from the replay (0-3); empty teams are omitted.</summary>
+public sealed record OnlinePlayer(string Name, string Race, string Type, int? Apm, int Team = 0);
 
 /// <summary>A replay file as listed by the ReplayKraken API
 /// (<c>GET https://cosmonarchy.com/api/matches</c>), reduced to what the
