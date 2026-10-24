@@ -38,7 +38,9 @@ public sealed record OnlineMatch(
     public string DateLabel => UploadedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
 
     [JsonIgnore]
-    public string VersionLabel => $"{GameVersion} ({GameVersionKind})";
+    public string VersionLabel => string.IsNullOrWhiteSpace(GameVersionKind)
+        ? GameVersion
+        : $"{GameVersion} ({GameVersionKind})";
 
     [JsonIgnore]
     public string FileName =>

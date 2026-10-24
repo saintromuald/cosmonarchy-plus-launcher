@@ -50,7 +50,9 @@ public sealed class ReplaySnapshot
     [JsonIgnore]
     public string VersionLabel => GameVersion.Length == 0
         ? ""
-        : $"{GameVersion} ({GameVersionKind})";
+        : string.IsNullOrWhiteSpace(GameVersionKind)
+            ? GameVersion
+            : $"{GameVersion} ({GameVersionKind})";
 
     public static ReplaySnapshot From(OnlineMatch match) => new()
     {

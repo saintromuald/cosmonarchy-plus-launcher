@@ -46,6 +46,29 @@ public static class RepoCatalog
             RepoKind.Game,
             BuildDir: "Release"
         ),
+        new(
+            "original",
+            "Cosmonarchy (Original)",
+            "https://gitlab.com/the-no-frauds-club/cosmonarchy.git",
+            RepoKind.Game,
+            BuildDir: "Original",
+            Branch: "master"
+        ),
+        new(
+            "old-release",
+            "Cosmonarchy (Old Release Archive)",
+            "https://gitlab.com/the-no-frauds-club/release/Cosmonarchy-old-1.git",
+            RepoKind.Game,
+            BuildDir: "Original",
+            Branch: "master"
+        ),
+        new(
+            "nightly",
+            "Cosmonarchy (2023 Nightly Archive)",
+            "https://gitlab.com/Pr0nogo3/specialbus.git",
+            RepoKind.Game,
+            BuildDir: "Original"
+        ),
     ];
 
     /// <summary>Community mirror entries, hidden unless requested.</summary>
