@@ -187,6 +187,7 @@ public sealed class ReplayKrakenService
             uploader,
             GetString(replay, "fileId"),
             HasDesyncFile(main) || HasDesyncFiles(item));
+    }
 
     /// <summary>True when the replay element carries the desync flag.</summary>
     private static bool HasDesyncFile(JsonElement replay) =>

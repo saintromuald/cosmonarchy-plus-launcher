@@ -32,6 +32,9 @@
         <TabItem Header="Favourites">
             <views:FavouritesPage />
         </TabItem>
+        <TabItem Header="Community">
+            <views:CommunityPage />
+        </TabItem>
     </TabControl>
 
 </Window>

@@ -711,4 +711,218 @@ public class CoreTests
         Assert.Contains("tracks plus", tracked.Summary);
         Assert.Contains("auto-updates", tracked.Summary);
     }
+
+    [Fact]
+    public async Task ReplayKraken_maps_the_desync_flag()
+    {
+        const string json = """
+        [
+          {
+            "_id": "6adc2ae3e3ec4a129c797df4",
+            "matchUuid": "d55c1992-bd15-5fdb-8071-1731e6030e0f",
+            "gameVersion": "daf2a27",
+            "gameVersionKind": "Prerelease",
+            "mainReplay": {
+              "matchUuid": "d55c1992-bd15-5fdb-8071-1731e6030e0f",
+              "fileId": "6adc2ae4e3ec4a129c797df7",
+              "hasDesyncFile": true,
+              "gameVersion": "daf2a27",
+              "uploaderName": "Esoteric",
+              "replayInfo": { "mapName": "Lucidity", "gameDuration": 300 }
+            }
+          }
+        ]
+        """;
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+        var match = Assert.Single(await ReplayKrakenService.ParseMatchesAsync(stream));
+        Assert.True(match.HasDesync);
+    }
+
+    [Fact]
+    public void ReplayLibrary_favourites_record_add_dates_and_snapshots()
+    {
+        var library = new ReplayLibrary();
+        var snapshot = new ReplaySnapshot { MapName = "Aegis", PlayersLabel = "A vs B", HasDesync = true };
+        Assert.True(library.ToggleFavorite("m1", snapshot));
+        var favorite = library.FavoriteFor("m1");
+        Assert.NotNull(favorite);
+        Assert.NotNull(favorite!.Snapshot);
+        Assert.Equal("Aegis", favorite.Snapshot!.MapName);
+        Assert.True(favorite.Snapshot.HasDesync);
+        Assert.True((DateTimeOffset.UtcNow - favorite.AddedAt) < TimeSpan.FromMinutes(1));
+        Assert.False(library.ToggleFavorite("m1", snapshot));
+        Assert.Null(library.FavoriteFor("m1"));
+    }
+
+    [Fact]
+    public void ReplayLibraryStore_migrates_v1_favourite_uuids()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-library-v1-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, """
+                {
+                  "Version": 1,
+                  "Watched": [{ "MatchUuid": "w1", "FileId": "f1", "Version": "v" }],
+                  "Favorites": ["m1", "m2"],
+                  "Notes": [{ "MatchUuid": "m1", "Text": "hi", "Tags": [], "Visibility": 1 }],
+                  "Lists": []
+                }
+                """);
+
+            var loaded = new ReplayLibraryStore(path).Load();
+
+            Assert.True(loaded.IsFavorite("m1"));
+            Assert.True(loaded.IsFavorite("m2"));
+            Assert.Equal(DateTimeOffset.MinValue, loaded.FavoriteFor("m1")!.AddedAt);
+            Assert.Null(loaded.FavoriteFor("m1")!.Snapshot);
+            Assert.True(loaded.WasWatched("w1"));
+            Assert.NotNull(loaded.NoteFor("m1"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ReplaySharing_note_payload_round_trips_through_a_discord_message()
+    {
+        var match = new OnlineMatch(
+            "uuid-1", DateTimeOffset.UtcNow, "Lucidity", TimeSpan.FromMinutes(10),
+            "daf2a27", "Prerelease",
+            [new OnlinePlayer("a", "Zerg", "Human", 100, 0)],
+            "a", "f1", HasDesync: true);
+        var library = new ReplayLibrary();
+        library.ToggleFavorite(match.MatchUuid, ReplaySnapshot.From(match));
+        library.SaveNote(match.MatchUuid, "desynced here", ["desync"], NoteVisibility.Shared);
+        var note = library.NoteFor(match.MatchUuid)!;
+
+        var payload = ReplaySharing.ExportNotePayload(
+            note, match, library.FavoriteFor(match.MatchUuid),
+            new ReplaySharing.Author("saintromuald", "discord-42"));
+        var message = ReplaySharing.DiscordNoteMessage(payload, note, match);
+        Assert.True(message.Length <= ReplaySharing.DiscordMaxLength);
+        Assert.Contains("desynced here", message);
+        Assert.Contains("saintromuald", payload);
+
+        var imported = ReplaySharing.ParseImport(message);
+        Assert.NotNull(imported);
+        Assert.Equal("saintromuald", imported!.AuthorDiscordName);
+        var favorite = Assert.Single(imported.Favorites);
+        Assert.Equal("uuid-1", favorite.MatchUuid);
+        Assert.True(favorite.Snapshot!.HasDesync);
+        var importedNote = Assert.Single(imported.Notes);
+        Assert.Equal("desynced here", importedNote.Text);
+        Assert.Equal(["desync"], importedNote.Tags);
+    }
+
+    [Fact]
+    public void ReplaySharing_list_export_carries_title_favourites_and_desync()
+    {
+        var match = new OnlineMatch(
+            "uuid-9", DateTimeOffset.UtcNow, "Aegis", TimeSpan.FromMinutes(5),
+            "daf2a27", "Prerelease",
+            [new OnlinePlayer("a", "Zerg", "Human", 100, 0),
+             new OnlinePlayer("b", "Terran", "Human", 100, 1)],
+            "a", "f9", HasDesync: true);
+        var library = new ReplayLibrary();
+        library.ToggleFavorite(match.MatchUuid, ReplaySnapshot.From(match));
+        library.SaveNote(match.MatchUuid, "check the bunker rush", [], NoteVisibility.Shared);
+        var list = new SavedReplayList { Name = "Best ZvT", Title = "finals only", MatchUuids = [match.MatchUuid] };
+
+        var json = ReplaySharing.ExportList(list, [match], library);
+
+        Assert.Contains("\"title\": \"finals only\"", json);
+        Assert.Contains("\"desynced\": true", json);
+        var imported = ReplaySharing.ParseImport(json);
+        Assert.NotNull(imported);
+        var importedList = Assert.Single(imported!.Lists);
+        Assert.Equal("Best ZvT", importedList.Name);
+        Assert.Equal("finals only", importedList.Title);
+        Assert.True(imported.Favorites.Any(f => f.MatchUuid == "uuid-9"));
+    }
+
+    [Fact]
+    public void ReplaySharing_import_rejects_unrecognised_text()
+    {
+        Assert.Null(ReplaySharing.ParseImport("hello there"));
+        Assert.Null(ReplaySharing.ParseImport("{ \"format\": \"something-else\", \"version\": 1 }"));
+    }
+
+    [Fact]
+    public void ReplayLibrary_merge_keeps_newer_notes_and_deduplicates_favourites()
+    {
+        var library = new ReplayLibrary();
+        library.SaveNote("m1", "old text", [], NoteVisibility.Shared);
+        library.NoteFor("m1")!.UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1);
+        var imported = new ImportedShare
+        {
+            AuthorDiscordName = "someone",
+        };
+        imported.Notes.Add(new ReplayNote
+        {
+            MatchUuid = "m1",
+            Text = "new text",
+            Visibility = NoteVisibility.Shared,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        imported.Favorites.Add(new FavoriteReplay { MatchUuid = "m1", AddedAt = DateTimeOffset.UtcNow });
+
+        var (favourites, notes, updated, lists) = library.Merge(imported);
+
+        Assert.Equal(1, favourites);
+        Assert.Equal(0, notes);
+        Assert.Equal(1, updated);
+        Assert.Equal(0, lists);
+        Assert.Equal("new text", library.NoteFor("m1")!.Text);
+    }
+
+    [Fact]
+    public void CommunityService_index_round_trips()
+    {
+        var shares = new[]
+        {
+            new CommunityShare
+            {
+                FileName = "cosmonarchy-abc12345.json",
+                Kind = ReplaySharing.FavoritesFormat,
+                Name = "Favourites",
+                DiscordName = "saintromuald",
+                DiscordId = "42",
+                SavedAt = DateTimeOffset.UtcNow,
+                GameCount = 7,
+                NoteCount = 2,
+            },
+            new CommunityShare
+            {
+                FileName = "cosmonarchy-def67890.json",
+                Kind = ReplaySharing.ListFormat,
+                Name = "Best ZvT",
+                Title = "finals",
+                SavedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+                GameCount = 3,
+            },
+        };
+
+        var json = CommunityService.SerializeIndex(shares);
+        var parsed = CommunityService.ParseIndex(json);
+
+        Assert.Equal(2, parsed.Count);
+        Assert.Equal("Favourites", parsed[0].Name); // newest first
+        Assert.Equal("saintromuald", parsed[0].DiscordName);
+        Assert.Equal("anonymous", parsed[1].AuthorLabel);
+        Assert.Equal(ReplaySharing.ListFormat, parsed[1].Kind);
+        Assert.Equal("finals", parsed[1].Title);
+    }
+
+    [Fact]
+    public void DiscordWebhook_url_validation()
+    {
+        Assert.True(DiscordWebhook.IsValidWebhookUrl("https://discord.com/api/webhooks/123/abc"));
+        Assert.True(DiscordWebhook.IsValidWebhookUrl("https://discordapp.com/api/webhooks/123/abc"));
+        Assert.False(DiscordWebhook.IsValidWebhookUrl("https://example.com/api/webhooks/123/abc"));
+        Assert.False(DiscordWebhook.IsValidWebhookUrl(""));
+        Assert.False(DiscordWebhook.IsValidWebhookUrl(null));
+    }
 }

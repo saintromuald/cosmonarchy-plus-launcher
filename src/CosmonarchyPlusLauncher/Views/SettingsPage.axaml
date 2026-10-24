@@ -7,7 +7,7 @@
              x:Class="CosmonarchyPlusLauncher.Views.SettingsPage"
              x:DataType="vm:SettingsViewModel">
 
-    <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
+    <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
 
         <TextBlock Grid.Row="0" Text="Settings" FontSize="20" FontWeight="SemiBold" />
 
@@ -38,18 +38,30 @@
                      Watermark="Optional: Discord → channel → Integrations → Webhooks → New Webhook → Copy URL" />
         </Grid>
 
-        <StackPanel Grid.Row="6" Orientation="Horizontal" Spacing="8" Margin="0,14,0,0">
+        <Grid Grid.Row="6" ColumnDefinitions="140,*" Margin="0,8,0,0">
+            <TextBlock Grid.Column="0" Text="Community repo" VerticalAlignment="Center" />
+            <TextBox Grid.Column="1" Text="{Binding CommunityRepo}"
+                     Watermark="owner/name — the public GitHub repo behind the Community tab" />
+        </Grid>
+
+        <Grid Grid.Row="7" ColumnDefinitions="140,*" Margin="0,8,0,0">
+            <TextBlock Grid.Column="0" Text="GitHub token" VerticalAlignment="Center" />
+            <TextBox Grid.Column="1" Text="{Binding GithubToken}" PasswordChar="•"
+                     Watermark="Optional: publish to the community repo (fine-grained, contents write on that repo)" />
+        </Grid>
+
+        <StackPanel Grid.Row="8" Orientation="Horizontal" Spacing="8" Margin="0,14,0,0">
             <Button Content="Save" Command="{Binding SaveCommand}" MinWidth="100" />
             <Button Content="Restore defaults" Command="{Binding ResetDefaultsCommand}" />
             <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Grid.Row="7" Orientation="Horizontal" Spacing="8" Margin="0,14,0,0">
+        <StackPanel Grid.Row="9" Orientation="Horizontal" Spacing="8" Margin="0,14,0,0">
             <Button Content="Check for updates" Command="{Binding CheckForUpdatesCommand}" />
             <TextBlock Text="{Binding UpdateStatus}" VerticalAlignment="Center" />
         </StackPanel>
 
-        <TextBlock Grid.Row="8" Text="Linux installs live inside the GE-Proton prefix (~/Games/cosmonarchy); the install root is its drive_c/Cosmonarchy directory. The webhook lets “Post to Discord” send shared notes and lists straight to a channel; sharing also works without it, via the clipboard."
+        <TextBlock Grid.Row="10" Text="Linux installs live inside the GE-Proton prefix (~/Games/cosmonarchy); the install root is its drive_c/Cosmonarchy directory. The webhook lets “Post to Discord” send shared notes and lists straight to a channel; sharing also works without it, via the clipboard. The GitHub token is only used to publish and unpublish your own shares on the community board."
                    Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                    Margin="0,12,0,0" TextWrapping="Wrap" />
     </Grid>

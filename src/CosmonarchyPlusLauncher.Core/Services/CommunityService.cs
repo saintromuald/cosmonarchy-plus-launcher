@@ -127,6 +127,11 @@ public sealed class CommunityService
                 owner, name, path,
                 new CreateFileRequest($"Share “{share.Name}”", Encode(payloadJson)));
         }
+        catch (NotFoundException)
+        {
+            throw new InvalidOperationException(
+                $"The community repo “{repo}” does not exist yet — create it as a public GitHub repo, then publish again.");
+        }
         catch (AuthorizationException)
         {
             throw new InvalidOperationException(
@@ -327,8 +332,11 @@ public sealed class CommunityService
         }
     }
 
-    private static bool TryProp(JsonElement element, string name, out JsonElement value) =>
-        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out value);
+    private static bool TryProp(JsonElement element, string name, out JsonElement value)
+    {
+        value = default;
+        return element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out value);
+    }
 
     private static string Get(JsonElement element, string name) =>
         TryProp(element, name, out var value) && value.ValueKind == JsonValueKind.String

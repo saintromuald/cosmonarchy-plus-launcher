@@ -388,8 +388,11 @@ public static class ReplaySharing
 
     // ---- Small JSON helpers ------------------------------------------------
 
-    private static bool TryProp(JsonElement element, string name, out JsonElement value) =>
-        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out value);
+    private static bool TryProp(JsonElement element, string name, out JsonElement value)
+    {
+        value = default;
+        return element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out value);
+    }
 
     private static string Get(JsonElement element, string name) =>
         TryProp(element, name, out var value) && value.ValueKind == JsonValueKind.String
@@ -411,8 +414,8 @@ public static class ReplaySharing
 
     private static bool TryBool(JsonElement element, string name, out bool result)
     {
-        result = false;
-        return TryProp(element, name, out var value) && value.ValueKind == JsonValueKind.True;
+        result = TryProp(element, name, out var value) && value.ValueKind == JsonValueKind.True;
+        return result;
     }
 
     private static DateTimeOffset? ParseDate(string text) =>
