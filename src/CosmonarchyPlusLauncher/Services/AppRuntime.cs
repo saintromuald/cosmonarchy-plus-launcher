@@ -14,6 +14,10 @@ public static class AppRuntime
 
     public static AccountService Account { get; } = new();
 
+    /// <summary>Set from MainWindow once the surface exists; used by
+    /// "Share note"/"Share list" to copy exports.</summary>
+    public static Avalonia.Input.Platform.IClipboard? Clipboard { get; set; }
+
     static AppRuntime()
     {
         // Adopt any existing checkouts (legacy Release/Prerelease, leftover

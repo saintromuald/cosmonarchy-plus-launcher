@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
+using CosmonarchyPlusLauncher.Services;
 
 namespace CosmonarchyPlusLauncher.Views;
 
@@ -21,7 +22,11 @@ public partial class MainWindow : Window
         // request a few times after open; the requests are idempotent, and
         // once one lands the compositor confirms it. WindowState cannot be
         // read back for this because Avalonia echoes the locally-set value.
-        Opened += (_, _) => ApplyStartupWindowState(attempts: 8);
+        Opened += (_, _) =>
+        {
+            AppRuntime.Clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            ApplyStartupWindowState(attempts: 8);
+        };
 
         void ApplyStartupWindowState(int attempts)
         {

@@ -2,17 +2,83 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CosmonarchyPlusLauncher.ViewModels"
              xmlns:models="using:CosmonarchyPlusLauncher.Core.Models"
+             xmlns:core="using:CosmonarchyPlusLauncher.Core.Services"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="560"
              x:Class="CosmonarchyPlusLauncher.Views.ReplaysPage"
              x:DataType="vm:ReplaysViewModel">
 
-    <Grid Margin="16" RowDefinitions="Auto,*">
+    <Grid Margin="16" RowDefinitions="Auto,Auto,*,Auto">
 
         <TextBlock Grid.Row="0" Text="Replays" FontSize="20" FontWeight="SemiBold" />
 
-        <TabControl Grid.Row="1" Margin="0,10,0,0">
+        <Expander Grid.Row="1" Header="Filters and saved lists" Margin="0,8,0,0" IsExpanded="False">
+            <Grid Margin="8" RowDefinitions="Auto,Auto,Auto,Auto">
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Matchups (tick both sides)" FontWeight="SemiBold" />
+                        <ItemsControl ItemsSource="{Binding RacePairs}" Width="330">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="5" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RacePairOption">
+                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSelected}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="T Terran · P Protoss · Z Zerg · A Askosi · O Other"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="6" Width="220">
+                        <TextBlock Text="Game size" FontWeight="SemiBold" />
+                        <WrapPanel>
+                            <CheckBox Content="1v1" IsChecked="{Binding Team1v1}" Margin="0,0,8,0" />
+                            <CheckBox Content="2v2" IsChecked="{Binding Team2v2}" Margin="0,0,8,0" />
+                            <CheckBox Content="3v3" IsChecked="{Binding Team3v3}" Margin="0,0,8,0" />
+                            <CheckBox Content="4v4" IsChecked="{Binding Team4v4}" Margin="0,0,8,0" />
+                            <CheckBox Content="Other" IsChecked="{Binding TeamOther}" />
+                        </WrapPanel>
+                        <CheckBox Content="Ignore observers / AI slots" IsChecked="{Binding IgnoreObservers}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="14" Margin="0,6,0,0">
+                    <CheckBox Content="Favourites only" IsChecked="{Binding FavoritesOnly}" />
+                    <CheckBox Content="Watched only" IsChecked="{Binding WatchedOnly}" />
+                    <CheckBox Content="With notes only" IsChecked="{Binding WithNotesOnly}" />
+                    <Button Content="Clear filters" Command="{Binding ClearFiltersCommand}" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                    <TextBlock Text="Saved lists:" VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding SavedLists}" SelectedItem="{Binding SelectedSavedList}"
+                              MinWidth="180">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="core:SavedReplayList">
+                                <TextBlock Text="{Binding Name}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Content="Apply" Command="{Binding ApplyListCommand}" />
+                    <Button Content="Delete" Command="{Binding DeleteListCommand}" />
+                    <Button Content="Share" Command="{Binding ShareListCommand}" />
+                    <TextBox Text="{Binding NewListName}" PlaceholderText="New list name" MinWidth="150" />
+                    <Button Content="Save current" Command="{Binding SaveListCommand}" />
+                </StackPanel>
+
+                <TextBlock Grid.Row="3" Text="{Binding ListStatus}" TextWrapping="Wrap" Margin="0,4,0,0"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+            </Grid>
+        </Expander>
+
+        <TabControl Grid.Row="2" Margin="0,8,0,0">
 
             <TabItem Header="Cosmonarchy OG">
                 <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="0,8,0,0">
@@ -38,16 +104,17 @@
                     </StackPanel>
 
                     <ListBox Grid.Row="2" Margin="0,10,0,0" ItemsSource="{Binding OgMatches}"
-                             SelectedItem="{Binding SelectedOgMatch}">
+                             SelectedItem="{Binding SelectedOgRow}">
                         <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="models:OnlineMatch">
-                                <Grid ColumnDefinitions="130,*,150,70,120">
-                                    <TextBlock Grid.Column="0" Text="{Binding DateLabel}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding PlayersLabel}"
+                            <DataTemplate x:DataType="vm:ReplayRow">
+                                <Grid ColumnDefinitions="28,130,*,150,70,120">
+                                    <TextBlock Grid.Column="0" Text="{Binding Badges}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding DateLabel}" />
+                                    <TextBlock Grid.Column="2" Text="{Binding PlayersLabel}"
                                                TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
-                                    <TextBlock Grid.Column="2" Text="{Binding MapName}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="3" Text="{Binding DurationLabel}" />
-                                    <TextBlock Grid.Column="4" Text="{Binding VersionLabel}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding MapName}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="4" Text="{Binding DurationLabel}" />
+                                    <TextBlock Grid.Column="5" Text="{Binding VersionLabel}" />
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -85,16 +152,17 @@
                     </StackPanel>
 
                     <ListBox Grid.Row="2" Margin="0,10,0,0" ItemsSource="{Binding PlusMatches}"
-                             SelectedItem="{Binding SelectedPlusMatch}">
+                             SelectedItem="{Binding SelectedPlusRow}">
                         <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="models:OnlineMatch">
-                                <Grid ColumnDefinitions="130,*,150,70,120">
-                                    <TextBlock Grid.Column="0" Text="{Binding DateLabel}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding PlayersLabel}"
+                            <DataTemplate x:DataType="vm:ReplayRow">
+                                <Grid ColumnDefinitions="28,130,*,150,70,120">
+                                    <TextBlock Grid.Column="0" Text="{Binding Badges}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding DateLabel}" />
+                                    <TextBlock Grid.Column="2" Text="{Binding PlayersLabel}"
                                                TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
-                                    <TextBlock Grid.Column="2" Text="{Binding MapName}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="3" Text="{Binding DurationLabel}" />
-                                    <TextBlock Grid.Column="4" Text="{Binding VersionLabel}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding MapName}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="4" Text="{Binding DurationLabel}" />
+                                    <TextBlock Grid.Column="5" Text="{Binding VersionLabel}" />
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -110,7 +178,6 @@
 
             <TabItem Header="Local files">
                 <Grid RowDefinitions="Auto,*,Auto" Margin="0,8,0,0">
-
                     <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*">
                         <Button Grid.Column="0" Content="Refresh" Command="{Binding RefreshCommand}" />
                         <Button Grid.Column="1" Content="Open folder" Command="{Binding OpenFolderCommand}"
@@ -120,16 +187,49 @@
                         <TextBlock Grid.Column="3" Text="{Binding Status}" VerticalAlignment="Center"
                                    Margin="12,0,0,0" TextTrimming="CharacterEllipsis" />
                     </Grid>
-
                     <ListBox Grid.Row="1" Margin="0,10,0,0" ItemsSource="{Binding Replays}"
                              SelectedItem="{Binding SelectedReplay}" />
-
                     <TextBlock Grid.Row="2" Text="Playing a replay switches to the vanilla build (no Plus plugin) and opens the game straight into it."
                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                                Margin="0,8,0,0" TextWrapping="Wrap" />
                 </Grid>
             </TabItem>
         </TabControl>
+
+        <Border Grid.Row="3" Margin="0,8,0,0" Padding="10" CornerRadius="4"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                IsVisible="{Binding HasNoteContext}">
+            <Grid RowDefinitions="Auto,Auto,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding NoteHeader}" FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis" />
+                    <Button Grid.Column="1" Content="Toggle favourite" Command="{Binding ToggleFavoriteCommand}"
+                            Margin="8,0,0,0" />
+                    <Button Grid.Column="2" Content="Share note" Command="{Binding ShareNoteCommand}"
+                            Margin="6,0,0,0" />
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="2*,*,Auto" Margin="0,6,0,0">
+                    <TextBox Grid.Column="0" Text="{Binding NoteText}" AcceptsReturn="True" Height="64"
+                             PlaceholderText="Note for this replay (private unless you choose Shared)…" />
+                    <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="4">
+                        <TextBox Text="{Binding NoteTags}" PlaceholderText="Tags: zvp, finals" />
+                        <ComboBox ItemsSource="{Binding Visibilities}" SelectedItem="{Binding NoteVisibility}"
+                                  HorizontalAlignment="Stretch" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Margin="8,0,0,0" Spacing="4">
+                        <Button Content="Save" Command="{Binding SaveNoteCommand}" />
+                        <Button Content="Delete" Command="{Binding DeleteNoteCommand}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="2" Margin="0,4,0,0" Spacing="1">
+                    <TextBlock Text="{Binding NoteMeta}" FontSize="11"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    <TextBlock Text="{Binding NoteStatus}" TextWrapping="Wrap" FontSize="11" />
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 
 </UserControl>
