@@ -29,10 +29,16 @@ public static class RemasteredAccess
     private const string UnlockHash =
         "c3afbb845f5a9949d4053fd632fdf563a325d973afcaac5d5135e517bbf7aa1c";
 
-    /// <summary>Default bundle download URL. Overridable per-machine via
-    /// AppSettings.RemasteredBundleUrl (also accepts a local path).</summary>
-    public const string DefaultBundleUrl =
-        "https://cosmonarchy.com/remastered/cosmonarchy-remastered.enc";
+    /// <summary>Bundle host repo: the encrypted payload lives as a GitHub
+    /// release asset; the launcher resolves the newest asset of the selected
+    /// channel ("release" / "prerelease") at unlock time.</summary>
+    public const string BundleOwner = "saintromuald";
+    public const string BundleRepo = "cosmonarchy-remastered-bundle";
+    public const string BundleAssetName = "cosmonarchy-remastered.enc";
+
+    /// <summary>Unlock channels.</summary>
+    public const string ChannelRelease = "release";
+    public const string ChannelPrerelease = "prerelease";
 
     private const int KdfIterations = 100_000;
 
@@ -76,7 +82,7 @@ public static class RemasteredAccess
         try
         {
             var url = string.IsNullOrWhiteSpace(settings.RemasteredBundleUrl)
-                ? DefaultBundleUrl
+                ? ResolveLatestAssetUrl(settings.RemasteredChannel)
                 : settings.RemasteredBundleUrl;
             var blob = Fetch(url);
             var plain = Decrypt(blob, password);
@@ -91,6 +97,33 @@ public static class RemasteredAccess
         {
             return false;
         }
+    }
+
+    /// <summary>Resolve the newest bundle asset of the given channel from
+    /// GitHub releases. Public repo, no auth needed; the payload is
+    /// ciphertext and useless without the unlock password.</summary>
+    public static string ResolveLatestAssetUrl(string channel)
+    {
+        var client = new Octokit.GitHubClient(
+            new Octokit.ProductHeaderValue("CosmonarchyPlusLauncher"));
+        Octokit.Release release;
+        if (channel == ChannelPrerelease)
+        {
+            var releases = client.Repository.Release
+                .GetAll(BundleOwner, BundleRepo)
+                .GetAwaiter().GetResult();
+            release = releases.FirstOrDefault(r => r.Prerelease)
+                ?? throw new InvalidOperationException("no prerelease bundle");
+        }
+        else
+        {
+            release = client.Repository.Release
+                .GetLatest(BundleOwner, BundleRepo)
+                .GetAwaiter().GetResult();
+        }
+        var asset = release.Assets.FirstOrDefault(a => a.Name == BundleAssetName)
+            ?? throw new InvalidOperationException($"no {BundleAssetName} asset");
+        return asset.BrowserDownloadUrl;
     }
 
     private static byte[] Fetch(string url)
