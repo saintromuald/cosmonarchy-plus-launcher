@@ -12,7 +12,7 @@ namespace CosmonarchyPlusLauncher.ViewModels;
 
 /// <summary>One online game plus this machine's library state (favourite,
 /// watched, note) for the list badges.</summary>
-public sealed record ReplayRow(OnlineMatch Match, bool Favorite, bool Watched, bool HasNote)
+public sealed record ReplayRow(OnlineMatch Match, bool Favorite, bool Watched, bool HasNote, bool Desynced)
 {
     public string PlayersLabel => Match.PlayersLabel;
     public string DateLabel => Match.DateLabel;
@@ -23,7 +23,8 @@ public sealed record ReplayRow(OnlineMatch Match, bool Favorite, bool Watched, b
     public string Badges => string.Concat(
         Favorite ? "★ " : "",
         Watched ? "▶ " : "",
-        HasNote ? "✎ " : "");
+        HasNote ? "✎ " : "",
+        Desynced ? "⚠ " : "");
 }
 
 /// <summary>A checkbox in the race-vs-race matrix.</summary>
@@ -62,8 +63,7 @@ public partial class ReplaysViewModel : ViewModelBase
     private readonly ReplayKrakenService _kraken = new();
     private readonly ReplayWatchService _watch;
     private readonly ReplayBuildResolver _resolver;
-    private readonly ReplayLibraryStore _libraryStore = new();
-    private readonly ReplayLibrary _library;
+    private readonly ReplayLibrary _library = AppRuntime.Library;
 
     private IReadOnlyList<OnlineMatch> _ogAll = [];
     private IReadOnlyList<OnlineMatch> _plusAll = [];
@@ -72,7 +72,7 @@ public partial class ReplaysViewModel : ViewModelBase
     {
         _watch = new ReplayWatchService(_settings, _kraken);
         _resolver = new ReplayBuildResolver(_settings);
-        _library = _libraryStore.Load();
+        AppRuntime.LibraryChanged += OnLibraryChanged;
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var candidates = new[]
@@ -119,7 +119,9 @@ public partial class ReplaysViewModel : ViewModelBase
     public ObservableCollection<SavedReplayList> SavedLists { get; } = new();
 
     [ObservableProperty] private SavedReplayList? _selectedSavedList;
+    [ObservableProperty] private SavedReplayList? _selectedAddList;
     [ObservableProperty] private string _newListName = "";
+    [ObservableProperty] private string _newListTitle = "";
     [ObservableProperty] private string _listStatus = "";
 
     // ---- Followed players -------------------------------------------------
@@ -279,6 +281,23 @@ public partial class ReplaysViewModel : ViewModelBase
 
     // ---- Library: notes, favourites, watched ------------------------------
 
+    /// <summary>The library changed (this tab or the Favourites tab saved
+    /// something): rebuild the list combos and refresh everything that
+    /// renders library state.</summary>
+    private void OnLibraryChanged()
+    {
+        var listId = SelectedSavedList?.Id;
+        var addId = SelectedAddList?.Id;
+        SavedLists.Clear();
+        foreach (var list in _library.Lists.OrderByDescending(l => l.SavedAt))
+            SavedLists.Add(list);
+        SelectedSavedList = SavedLists.FirstOrDefault(l => l.Id == listId) ?? SavedLists.FirstOrDefault();
+        SelectedAddList = SavedLists.FirstOrDefault(l => l.Id == addId);
+        ReapplyFilters();
+        if (NoteMatch is not null)
+            ShowNote(NoteMatch);
+    }
+
     private void ShowNote(OnlineMatch match)
     {
         NoteMatch = match;
@@ -288,10 +307,22 @@ public partial class ReplaysViewModel : ViewModelBase
         NoteVisibility = note?.Visibility ?? NoteVisibility.Private;
         NoteFavorite = _library.IsFavorite(match.MatchUuid);
         NoteHeader = $"{match.PlayersLabel} — {match.MapName} ({match.VersionLabel})";
+        var favourite = _library.FavoriteFor(match.MatchUuid);
         var watched = _library.WatchEntry(match.MatchUuid);
-        NoteMeta = watched is null
-            ? "Not watched yet."
-            : $"Watched {watched.WatchedAt.LocalDateTime:yyyy-MM-dd HH:mm} on {watched.Version}.";
+        var bits = new List<string>
+        {
+            favourite is null
+                ? "Not favourited."
+                : favourite.AddedAt == DateTimeOffset.MinValue
+                    ? "★ Favourited (added before the launcher recorded dates)."
+                    : $"★ Favourited {favourite.AddedAt.LocalDateTime:yyyy-MM-dd HH:mm}",
+            watched is null
+                ? "Not watched yet."
+                : $"Watched {watched.WatchedAt.LocalDateTime:yyyy-MM-dd HH:mm} on {watched.Version}.",
+        };
+        if (match.HasDesync)
+            bits.Add("⚠ This game desynced.");
+        NoteMeta = string.Join(" · ", bits);
         NoteStatus = "";
     }
 
@@ -302,13 +333,10 @@ public partial class ReplaysViewModel : ViewModelBase
             return;
         var tags = NoteTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         _library.SaveNote(NoteMatch.MatchUuid, NoteText, tags, NoteVisibility);
-        _libraryStore.Save(_library);
-        NoteStatus = NoteVisibility == NoteVisibility.Shared
-            ? "Saved (shared with lists you export)."
-            : "Saved privately on this machine.";
+        AppRuntime.SaveLibrary();
         ShowNote(NoteMatch);
         NoteStatus = NoteVisibility == NoteVisibility.Shared
-            ? "Saved (shared with lists you export)."
+            ? "Saved (included when you share this note or lists)."
             : "Saved privately on this machine.";
         ReapplyFilters();
     }
@@ -319,7 +347,7 @@ public partial class ReplaysViewModel : ViewModelBase
         if (NoteMatch is null)
             return;
         _library.DeleteNote(NoteMatch.MatchUuid);
-        _libraryStore.Save(_library);
+        AppRuntime.SaveLibrary();
         NoteText = "";
         NoteTags = "";
         NoteVisibility = NoteVisibility.Private;
@@ -332,10 +360,24 @@ public partial class ReplaysViewModel : ViewModelBase
     {
         if (NoteMatch is null)
             return;
-        NoteFavorite = _library.ToggleFavorite(NoteMatch.MatchUuid);
-        _libraryStore.Save(_library);
+        NoteFavorite = _library.ToggleFavorite(NoteMatch.MatchUuid, ReplaySnapshot.From(NoteMatch));
+        AppRuntime.SaveLibrary();
         NoteStatus = NoteFavorite ? "Added to favourites." : "Removed from favourites.";
         ReapplyFilters();
+    }
+
+    [RelayCommand]
+    private void AddNoteMatchToList()
+    {
+        if (NoteMatch is null || SelectedAddList is not { } list)
+            return;
+        var uuid = NoteMatch.MatchUuid;
+        if (!list.MatchUuids.Any(u => u.Equals(uuid, StringComparison.OrdinalIgnoreCase)))
+        {
+            list.MatchUuids.Insert(0, uuid);
+            AppRuntime.SaveLibrary();
+        }
+        NoteStatus = $"Added “{NoteMatch.PlayersLabel}” to “{list.Name}” ({list.MatchUuids.Count} game(s)).";
     }
 
     [RelayCommand]
@@ -349,14 +391,52 @@ public partial class ReplaysViewModel : ViewModelBase
             NoteStatus = "Save the note first.";
             return;
         }
-        var text = ReplaySharing.ExportNote(note, NoteMatch);
-        if (text is null)
+        if (note.Visibility != NoteVisibility.Shared)
         {
             NoteStatus = "This note is private. Switch it to Shared and save to share it.";
             return;
         }
-        _ = CopyToClipboardAsync(text);
-        NoteStatus = "Shared note copied to the clipboard.";
+        var payload = ReplaySharing.ExportNotePayload(note, NoteMatch, _library.FavoriteFor(NoteMatch.MatchUuid));
+        var message = ReplaySharing.DiscordNoteMessage(payload, note, NoteMatch);
+        _ = CopyToClipboardAsync(message);
+        DesktopActions.OpenDiscord();
+        NoteStatus = "Copied a Discord-ready message and opened Discord — paste it into any channel. The recipient imports it in Favourites → Import.";
+    }
+
+    [RelayCommand]
+    private async Task PostNoteToDiscordAsync()
+    {
+        if (NoteMatch is null)
+            return;
+        var note = _library.NoteFor(NoteMatch.MatchUuid);
+        if (note is null || note.Visibility != NoteVisibility.Shared)
+        {
+            NoteStatus = "Save the note as Shared first.";
+            return;
+        }
+        var payload = ReplaySharing.ExportNotePayload(note, NoteMatch, _library.FavoriteFor(NoteMatch.MatchUuid));
+        NoteStatus = await PostToDiscordAsync(
+            ReplaySharing.DiscordNoteMessage(payload, note, NoteMatch), fileName: null, fileContent: null);
+    }
+
+    private static async Task<string> PostToDiscordAsync(string content, string? fileName, string? fileContent)
+    {
+        var webhook = AppRuntime.Settings.DiscordWebhookUrl;
+        if (string.IsNullOrWhiteSpace(webhook) || !DiscordWebhook.IsValidWebhookUrl(webhook))
+            return "No Discord webhook configured. In Discord: channel → Integrations → Webhooks → New, then paste the URL in Settings.";
+        try
+        {
+            var poster = new DiscordWebhook();
+            if (fileContent is null)
+                await poster.PostAsync(webhook, content);
+            else
+                await poster.PostWithFileAsync(webhook, content, fileName ?? "Cosmonarchy-share.json", fileContent);
+            return "Posted to Discord.";
+        }
+        catch (Exception ex)
+        {
+            return $"Could not post to Discord: {ex.Message}";
+        }
     }
 
     // ---- Saved lists ------------------------------------------------------
@@ -377,14 +457,14 @@ public partial class ReplaysViewModel : ViewModelBase
         var list = new SavedReplayList
         {
             Name = name,
+            Title = NewListTitle.Trim(),
             Filters = BuildFilters(),
             MatchUuids = uuids,
         };
         _library.Lists.Add(list);
-        _libraryStore.Save(_library);
-        SavedLists.Insert(0, list);
-        SelectedSavedList = list;
+        AppRuntime.SaveLibrary(); // raises LibraryChanged → SavedLists rebuilt, newest selected
         NewListName = "";
+        NewListTitle = "";
         ListStatus = $"Saved “{name}” with {uuids.Count} game(s).";
     }
 
@@ -415,9 +495,7 @@ public partial class ReplaysViewModel : ViewModelBase
         if (SelectedSavedList is not { } list)
             return;
         _library.Lists.Remove(list);
-        _libraryStore.Save(_library);
-        SavedLists.Remove(list);
-        SelectedSavedList = SavedLists.FirstOrDefault();
+        AppRuntime.SaveLibrary(); // raises LibraryChanged → SavedLists rebuilt
         ListStatus = $"Deleted “{list.Name}”.";
     }
 
@@ -429,7 +507,26 @@ public partial class ReplaysViewModel : ViewModelBase
         var json = ReplaySharing.ExportList(list, _ogAll.Concat(_plusAll), _library);
         var path = ReplaySharing.SaveToDownloads(list.Name, json);
         _ = CopyToClipboardAsync(json);
-        ListStatus = $"Shared “{list.Name}” → {path} (also copied to the clipboard).";
+        ListStatus = $"Shared “{list.Name}” → {path}. The share file is in Downloads and the payload is on the clipboard — attach the file in Discord (or paste the payload anywhere); the recipient imports it in Favourites → Import.";
+    }
+
+    [RelayCommand]
+    private async Task PostListToDiscordAsync()
+    {
+        if (SelectedSavedList is not { } list)
+            return;
+        var json = ReplaySharing.ExportList(list, _ogAll.Concat(_plusAll), _library);
+        var noteCount = list.MatchUuids.Count(u =>
+            _library.NoteFor(u) is { Visibility: NoteVisibility.Shared });
+        var content = ReplaySharing.DiscordListMessage(list.Name, list.Title, list.MatchUuids.Count, noteCount);
+        ListStatus = await PostToDiscordAsync(content, $"Cosmonarchy-{SafeFileName(list.Name)}.json", json);
+    }
+
+    private static string SafeFileName(string name)
+    {
+        var safe = string.Concat(name.Where(c => !Path.GetInvalidFileNameChars().Contains(c)));
+        safe = string.Concat(safe.Select(c => c == ' ' ? '-' : c));
+        return safe.Length == 0 ? "replay-list" : safe;
     }
 
     [RelayCommand]
@@ -498,7 +595,7 @@ public partial class ReplaysViewModel : ViewModelBase
             SetStatus(isPlus, "Working out the build…");
             var build = await Task.Run(() => _watch.WatchAsync(match, progress, CancellationToken.None));
             _library.MarkWatched(match.MatchUuid, match.FileId, match.VersionLabel);
-            _libraryStore.Save(_library);
+            AppRuntime.SaveLibrary();
             SetStatus(isPlus, $"Launched {match.FileName} on {build.Label} {build.FullSha[..8]}.");
             ReapplyFilters();
             ShowNote(match);
@@ -626,7 +723,8 @@ public partial class ReplaysViewModel : ViewModelBase
                 match,
                 _library.IsFavorite(match.MatchUuid),
                 _library.WasWatched(match.MatchUuid),
-                note is { Text.Length: > 0 } || (note?.Tags.Count ?? 0) > 0));
+                note is { Text.Length: > 0 } || (note?.Tags.Count ?? 0) > 0,
+                match.HasDesync));
         }
 
         var restored = previous is null

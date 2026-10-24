@@ -25,7 +25,7 @@ public sealed class ReplayKrakenService
         _http = http ?? CreateHttpClient();
         _cacheFile = cacheFile ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "cosmonarchy-plus-launcher", "matches-cache-v2.json");
+            "cosmonarchy-plus-launcher", "matches-cache-v3.json");
     }
 
     private static HttpClient CreateHttpClient()
@@ -185,7 +185,26 @@ public sealed class ReplayKrakenService
             GetString(item, "gameVersionKind"),
             players,
             uploader,
-            GetString(replay, "fileId"));
+            GetString(replay, "fileId"),
+            HasDesyncFile(main) || HasDesyncFiles(item));
+
+    /// <summary>True when the replay element carries the desync flag.</summary>
+    private static bool HasDesyncFile(JsonElement replay) =>
+        replay.ValueKind == JsonValueKind.Object &&
+        replay.TryGetProperty("hasDesyncFile", out var flag) &&
+        flag.ValueKind == JsonValueKind.True;
+
+    /// <summary>True when any uploaded variant of the match has a desync file.</summary>
+    private static bool HasDesyncFiles(JsonElement item)
+    {
+        if (!item.TryGetProperty("replays", out var replays) || replays.ValueKind != JsonValueKind.Array)
+            return false;
+        foreach (var variant in replays.EnumerateArray())
+        {
+            if (HasDesyncFile(variant))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>Mongo ObjectIDs start with the creation time in Unix seconds;

@@ -32,6 +32,9 @@ public partial class SettingsViewModel : ViewModelBase
     private bool _fullVersionLog = AppRuntime.Settings.FullVersionLog;
 
     [ObservableProperty]
+    private string _discordWebhookUrl = AppRuntime.Settings.DiscordWebhookUrl ?? "";
+
+    [ObservableProperty]
     private string _status = "";
 
     [ObservableProperty]
@@ -44,6 +47,9 @@ public partial class SettingsViewModel : ViewModelBase
         _settings.LinuxPrefixRoot = LinuxPrefixRoot.TrimEnd('/', '\\');
         _settings.ActionOnPlay = ActionOnPlay;
         _settings.FullVersionLog = FullVersionLog;
+        _settings.DiscordWebhookUrl = string.IsNullOrWhiteSpace(DiscordWebhookUrl)
+            ? null
+            : DiscordWebhookUrl.Trim();
         _settings.Save();
         Status = "Saved.";
     }
@@ -55,6 +61,7 @@ public partial class SettingsViewModel : ViewModelBase
         LinuxPrefixRoot = PlatformDefaults.LinuxPrefixRoot();
         ActionOnPlay = ActionOnPlay.StayOpen;
         FullVersionLog = false;
+        DiscordWebhookUrl = "";
         Status = "Defaults restored — press Save to keep them.";
     }
 

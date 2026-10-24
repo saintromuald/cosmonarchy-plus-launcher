@@ -52,6 +52,22 @@ public sealed class AppSettings
     /// <summary>Asset id of the last-installed CrownLink release, for caching.</summary>
     public int CrownLinkAssetId { get; set; }
 
+    /// <summary>Optional Discord webhook URL (channel → Integrations →
+    /// Webhooks) for posting shared notes/lists straight to a channel.
+    /// Sharing also works without one, via the clipboard.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DiscordWebhookUrl { get; set; }
+
+    /// <summary>The public GitHub repo that hosts the community share board
+    /// ("owner/name"). The Community tab reads it without authentication.</summary>
+    public string CommunityRepo { get; set; } = "saintromuald/cosmonarchy-shares";
+
+    /// <summary>Optional GitHub token for publishing to the community repo:
+    /// a fine-grained token with "Contents: read and write" on that one repo,
+    /// or a classic token with repo scope. Never needed for reading.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GitHubToken { get; set; }
+
     public string LinuxPrefixRoot { get; set; } = PlatformDefaults.LinuxPrefixRoot();
 
     // The Core project cannot reference the UI assembly; the default repo id

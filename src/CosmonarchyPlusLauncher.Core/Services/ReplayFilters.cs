@@ -113,7 +113,8 @@ public static class ReplayQuery
     public static IEnumerable<OnlineMatch> Apply(
         IEnumerable<OnlineMatch> matches, ReplayFilters filters, ReplayLibrary library)
     {
-        var favourites = new HashSet<string>(library.Favorites, StringComparer.OrdinalIgnoreCase);
+        var favourites = library.Favorites.Select(f => f.MatchUuid)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var watched = library.Watched.Select(w => w.MatchUuid)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var noted = library.Notes.Where(n => n.Text.Length > 0)
