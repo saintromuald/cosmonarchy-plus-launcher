@@ -61,6 +61,7 @@ jobs:
           mkdir -p AppDir/usr/bin AppDir/usr/share/icons/hicolor/256x256/apps AppDir/usr/share/applications
           cp -r out/linux/* AppDir/usr/bin/
           cp packaging/linux/cosmonarchy-plus-launcher.desktop AppDir/usr/share/applications/
+          cp packaging/linux/cosmonarchy-plus-launcher.desktop AppDir/
           cp packaging/linux/cosmonarchy-plus-launcher.png AppDir/usr/share/icons/hicolor/256x256/apps/
           cp packaging/linux/cosmonarchy-plus-launcher.png AppDir/
           cat > AppDir/AppRun <<'EOF'
@@ -99,10 +100,11 @@ jobs:
         with:
           name: appimage
           path: dist
+          if-no-files-found: ignore
       - name: Zip payloads
         run: |
           cd dist
-          7z a -tzip CosmonarchyPlusLauncher-win-x64.zip ./win-x64/* >/dev/null || true
+          zip -q -r CosmonarchyPlusLauncher-win-x64.zip win-x64 || true
           tar -czf CosmonarchyPlusLauncher-linux-x64.tar.gz linux-x64 || true
       - uses: softprops/action-gh-release@v2
         with:
