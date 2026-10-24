@@ -1,9 +1,9 @@
 # Cosmonarchy Plus Launcher
 
 An open-source, cross-platform launcher for [Cosmonarchy BW](https://fraudsclub.com/cosmonarchy-bw/).
-Install, update, pick any version, apply patches, stage your Plus/rollback
-variants, link your account, and play — on Linux (Wine/umu + GE-Proton) and
-Windows, from one codebase.
+Install, update, keep any number of versions side by side and switch between
+them, apply patches, stage your Plus/rollback variants, link your account, and
+play — on Linux (Wine/umu + GE-Proton) and Windows, from one codebase.
 
 This is an **independent, clean-room reimplementation**. It is not affiliated
 with the No-Frauds Club and shares no code with the closed-source Fraud
@@ -21,10 +21,11 @@ the Avalonia UI is scaffolded but not yet wired.
 | Area | State |
 | --- | --- |
 | Repo install/update + version pick | Working (live-prefix smoke tested) |
+| Multiple installed versions (install, pin, switch, delete) | Working (smoke tested) |
 | Play + variants (Original/Plus/Netcode) | Working (Linux launch via `umu-run`; Windows path written) |
 | Patch pipeline (StarCraft, patches.yml, CrownLink) | Working (smoke tested) |
 | Account + community | cosmonarchy.com device login, profile, website and Discord links |
-| Replays tab | Lists, opens folder, plays selected replays on the vanilla build |
+| Replays tab | Local files: list, open folder, play selected; online: latest 20 games, follow players, download + watch (ReplayKraken) |
 | Self-updater | GitHub Releases check in Settings |
 | Packaging | CI builds win-x64 exe, linux-x64, AppImage; Arch PKGBUILD |
 

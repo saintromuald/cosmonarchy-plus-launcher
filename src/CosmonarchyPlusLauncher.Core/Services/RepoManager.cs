@@ -135,17 +135,34 @@ public sealed class RepoManager : IDisposable
     public IReadOnlyList<CommitInfo> Log(int maxCount = 200)
     {
         var repo = Open();
-        return repo.Commits.Take(maxCount).Select(c => new CommitInfo(
-            c.Id.Sha,
-            c.MessageShort,
-            c.Author.When.ToString("yyyy-MM-dd HH:mm"))).ToList();
+        var result = new List<CommitInfo>();
+        try
+        {
+            foreach (var c in repo.Commits.Take(maxCount))
+            {
+                result.Add(new CommitInfo(c.Id.Sha, c.MessageShort,
+                    c.Author.When.ToString("yyyy-MM-dd HH:mm")));
+            }
+        }
+        catch (LibGit2SharpException)
+        {
+            // Partial history (missing parent objects after an interrupted
+            // clone): keep everything that enumerated up to the gap.
+        }
+        return result;
     }
 
     public CommitInfo? NewestCommit()
     {
         var repo = Open();
-        var c = repo.Commits.FirstOrDefault();
-        return c is null ? null : new CommitInfo(c.Id.Sha, c.MessageShort, c.Author.When.ToString("yyyy-MM-dd HH:mm"));
+        // Resolve HEAD directly: walking repo.Commits dies on broken
+        // history (a missing parent object), which some checkouts have.
+        var target = repo.Refs.Head?.TargetIdentifier;
+        if (target is null)
+            return null;
+        var c = repo.Lookup<Commit>(target);
+        return c is null ? null : new CommitInfo(c.Id.Sha, c.MessageShort,
+            c.Author.When.ToString("yyyy-MM-dd HH:mm"));
     }
 
     public bool HasLocalChanges()

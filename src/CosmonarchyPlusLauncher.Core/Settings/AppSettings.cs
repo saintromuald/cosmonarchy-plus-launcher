@@ -19,6 +19,16 @@ public sealed class AppSettings
 
     public string SelectedRepoId { get; set; } = DefaultRepoId;
 
+    /// <summary>The installed game versions. Each has its own checkout
+    /// directory under the install root; they share the StarCraft base and
+    /// the maps. Populated by adopting existing checkouts on first launch
+    /// and by the install form in the UI.</summary>
+    public List<GameVersion> Versions { get; set; } = [];
+
+    /// <summary>Which installed version the Play/Update/Delete buttons and
+    /// the Replays page act on.</summary>
+    public string? SelectedVersionId { get; set; }
+
     public bool ShowUnofficialRepos { get; set; }
 
     public Variant Variant { get; set; } = Variant.Original;
@@ -35,6 +45,9 @@ public sealed class AppSettings
 
     /// <summary>Patch ids already installed, so they are not re-applied.</summary>
     public List<string> PatchesInstalled { get; set; } = [];
+
+    /// <summary>Players whose replays the Replays page should surface.</summary>
+    public List<string> FollowedPlayers { get; set; } = [];
 
     /// <summary>Asset id of the last-installed CrownLink release, for caching.</summary>
     public int CrownLinkAssetId { get; set; }

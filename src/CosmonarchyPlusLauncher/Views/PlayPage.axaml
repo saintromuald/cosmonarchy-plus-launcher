@@ -8,42 +8,90 @@
              x:Class="CosmonarchyPlusLauncher.Views.PlayPage"
              x:DataType="vm:PlayViewModel">
 
-    <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
+    <Grid Margin="16" RowDefinitions="Auto,*,Auto,Auto">
 
         <TextBlock Grid.Row="0" Text="Play" FontSize="20" FontWeight="SemiBold" />
 
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,8,0,0">
-            <ComboBox Grid.Column="0"
-                      ItemsSource="{Binding Repos}"
-                      SelectedItem="{Binding SelectedRepo}"
-                      HorizontalAlignment="Stretch">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="models:RepoEntry">
-                        <TextBlock Text="{Binding Name}" />
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-            <CheckBox Grid.Column="1" Content="Show unofficial mirrors"
-                      IsChecked="{Binding ShowUnofficial}" Margin="12,0,0,0"
-                      VerticalAlignment="Center" />
+        <Grid Grid.Row="1" ColumnDefinitions="*,330" Margin="0,8,0,0">
+
+            <!-- Left: installed versions, switchable with one click. -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Row="0" Text="Installed versions"
+                           FontWeight="SemiBold" Margin="0,0,0,6" />
+                <ListBox Grid.Row="1" ItemsSource="{Binding Installed}"
+                         SelectedItem="{Binding SelectedInstall}"
+                         Background="Transparent">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:GameVersion">
+                            <StackPanel Spacing="2" Margin="0,3">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding Summary}"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                           FontSize="12" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                    <Button Content="Play" MinWidth="110" Command="{Binding PlayCommand}"
+                            IsEnabled="{Binding CanPlay}" />
+                    <Button Content="Update" MinWidth="110" Command="{Binding UpdateCommand}"
+                            IsEnabled="{Binding CanPlay}" />
+                    <Button Content="Delete" MinWidth="110" Command="{Binding DeleteCommand}"
+                            IsEnabled="{Binding CanPlay}" />
+                    <TextBlock Text="Versions share the StarCraft base; each has its own build folder."
+                               FontSize="12" VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Right: install a new version. Existing checkouts are never
+                 touched; every install lands in its own folder. -->
+            <Border Grid.Column="1" Margin="12,0,0,0" Padding="12"
+                    Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                    CornerRadius="4">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Install a new version" FontWeight="SemiBold" />
+                    <TextBlock Text="Repository" FontSize="12"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    <ComboBox ItemsSource="{Binding Repos}"
+                              SelectedItem="{Binding SelectedRepo}"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:RepoEntry">
+                                <TextBlock Text="{Binding Name}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <CheckBox Content="Show unofficial mirrors"
+                              IsChecked="{Binding ShowUnofficial}" />
+                    <TextBlock Text="Version to install" FontSize="12"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    <ComboBox ItemsSource="{Binding NewVersionOptions}"
+                              SelectedItem="{Binding SelectedSource}"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:VersionOption">
+                                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Text="Name (optional)" FontSize="12"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    <TextBox Text="{Binding NewName}"
+                             PlaceholderText="Default: repository + version" />
+                    <Button Content="Install" HorizontalAlignment="Stretch"
+                            Command="{Binding InstallCommand}"
+                            IsEnabled="{Binding CanInstall}" />
+                    <TextBlock Text="Each install gets its own folder, so any number of versions can coexist. Switch by selecting one and pressing Play."
+                               FontSize="12" TextWrapping="Wrap"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                </StackPanel>
+            </Border>
         </Grid>
 
-        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,8,0,0">
-            <ComboBox Grid.Column="0"
-                      ItemsSource="{Binding Versions}"
-                      SelectedItem="{Binding SelectedVersion}"
-                      HorizontalAlignment="Stretch">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:VersionOption">
-                        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-            <Button Grid.Column="1" Content="Refresh versions"
-                    Command="{Binding RefreshCommand}" Margin="12,0,0,0" />
-        </Grid>
-
-        <Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,Auto" Margin="0,8,0,0">
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,Auto,*" Margin="0,8,0,0">
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
                 <TextBlock Text="Variant:" VerticalAlignment="Center" />
                 <ComboBox ItemsSource="{Binding Variants}"
@@ -52,41 +100,18 @@
                 <ComboBox ItemsSource="{Binding Roles}"
                           SelectedItem="{Binding Role}" MinWidth="120" />
             </StackPanel>
-        </Grid>
-
-        <Grid Grid.Row="4" ColumnDefinitions="Auto,Auto,Auto" Margin="0,12,0,0">
-            <Button Grid.Column="0" Content="Install / Update" MinWidth="140"
-                    Command="{Binding InstallCommand}"
-                    IsEnabled="{Binding CanInstall}" />
-            <Button Grid.Column="1" Content="Play" MinWidth="140" Margin="12,0,0,0"
-                    Command="{Binding PlayCommand}"
-                    IsEnabled="{Binding CanInstall}" />
-            <Button Grid.Column="2" Content="Fetch full version log" MinWidth="160" Margin="12,0,0,0"
+            <Button Grid.Column="2" Content="Refresh versions" Margin="12,0,0,0"
+                    Command="{Binding RefreshCommand}" />
+            <Button Grid.Column="3" Content="Fetch full version log" HorizontalAlignment="Right"
                     Command="{Binding UnshallowCommand}"
                     IsEnabled="{Binding CanInstall}" />
         </Grid>
 
-        <Grid Grid.Row="5" RowDefinitions="Auto,*" Margin="0,12,0,0">
-            <Border Padding="10"
-                    Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                    CornerRadius="4">
-                <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
-            </Border>
-
-            <Border Grid.Row="1" Margin="0,8,0,0" Padding="2"
-                    Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                    CornerRadius="4">
-                <ListBox ItemsSource="{Binding Versions}"
-                         SelectedItem="{Binding SelectedVersion}"
-                         Background="Transparent">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="vm:VersionOption">
-                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </Border>
-        </Grid>
+        <Border Grid.Row="3" Margin="0,10,0,0" Padding="10"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                CornerRadius="4">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+        </Border>
     </Grid>
 
 </UserControl>

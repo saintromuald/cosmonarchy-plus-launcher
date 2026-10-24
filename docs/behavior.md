@@ -19,9 +19,12 @@ The launcher manages git repositories:
 | plus | Plugin (staged as `zz-cosmo-plus.qdp`) | `https://github.com/saintromuald/cosmonarchy-plus.git` |
 | rollback | Plugin (staged as `zz-cosmo-rollback.qdp`) | `https://github.com/saintromuald/cosmonarchy-rollback.git` |
 
-Game repos clone into `<RootPath>/<BuildDir>` (Release or Prerelease). Maps
-clone into `<RootPath>/Starcraft/maps/CMBW-Root`. The selected repo id and the
-"show unofficial repos" flag persist across runs.
+Game repos clone into `<RootPath>/versions/<id>/` for new installs. Legacy
+checkouts in `<RootPath>/Release` or `<RootPath>/Prerelease` are adopted as
+versions on first launch and keep their directories. Maps clone into
+`<RootPath>/Starcraft/maps/CMBW-Root`. The selected repo id, the "show
+unofficial repos" flag, the installed version list, and the selected version
+persist across runs.
 
 ## 2. Layout
 
@@ -33,9 +36,18 @@ directory inside `~/Games/cosmonarchy/prefix`.
   Starcraft/            StarCraft base (StarCraft.exe, ddraw.ini)
     maps/CMBW-Root/     maps repo
     CrownLink.snp       network plugin
-  Release/              game repo checkout (Cosmonarchy BW.exe, plugins/)
+  Release/              legacy game checkout (adopted as a version)
+  Prerelease/           legacy game checkout (adopted as a version)
+  versions/
+    <id>/               a game checkout installed by this launcher
+      Cosmonarchy BW.exe, plugins/, mpq/, temp.mpq
   starcraft.zip         transient
 ```
+
+Every version shares the Starcraft base, the maps repo, the patches, and the
+CrownLink plugin; only the game checkout under `versions/<id>` (or a legacy
+directory) is per-version, so any number of versions can coexist and switching
+is just playing a different one.
 
 ## 3. Install / update pipeline
 
@@ -50,18 +62,21 @@ Order of operations, each reported to the UI:
 3. **CrownLink.** Fetch the latest release of `impromptu1583/SNPJuice` on
    GitHub, pick the `.snp` asset (prefer `crownlink.snp`). Skip when the file
    size matches and the asset id is cached.
-4. **Game repo.** Clone if absent (or if the origin URL differs). Otherwise:
-   fetch; skip the reset when the tree has local changes; check out the repo's
-   branch and reset it to `<remote>/<branch>` (or hard-reset to the selected
-   version); update submodules.
+4. **Game repo.** Scoped to the selected installed version. Clone into the
+   version's own directory when absent (or when the origin URL differs).
+   Otherwise: fetch; skip the reset when the tree has local changes; a
+   **tracked** version checks out the repo's branch and resets it to
+   `<remote>/<branch>`, a **pinned** version hard-resets to its pinned commit;
+   update submodules.
 5. **Maps.** Clone or fetch + reset `origin/main`.
 6. **Wine.** When running under Wine, set `HKCU\Software\Wine\DllOverrides`
    `ddraw = native,builtin`.
 
-Version selection is: Latest (fetch + check out the repo's branch and reset it
-to the remote tip), Current (keep the checked-out commit), or any specific
-commit from the log. The log is shown as a list; "full version log" unshallows
-a shallow clone before reading it.
+Version management: the Play page lists every installed version; Play, Update,
+and Delete act on the selected one, and Install always creates a *new* version
+(never touching existing checkouts). An install either tracks the repo's
+branch (updates to the newest build on play/update) or pins one specific
+commit from the log (frozen until removed or explicitly updated).
 
 ## 4. Variants and launch
 
@@ -87,9 +102,10 @@ Launch:
 - **Windows:** run `Cosmonarchy.exe` (fallback `Cosmonarchy BW.exe`) in the
   repo dir; play waits until a `Starcraft` process with a window title exists.
   After launch: stay open, minimise, or close per the action-on-play setting.
-- **Linux:** `umu-run C:\Cosmonarchy\<BuildDir>\Cosmonarchy BW.exe` with
-  `WINEPREFIX`, `PROTONPATH=GE-Proton`, `GAMEID=umu-cosmonarchy-<BuildDir>`,
-  `PROTON_VERB=waitforexitandrun`.
+- **Linux:** `umu-run C:\Cosmonarchy\<version dir>\Cosmonarchy BW.exe` with
+  `WINEPREFIX`, `PROTONPATH=GE-Proton`, `GAMEID=umu-cosmonarchy-<version id>`,
+  `PROTON_VERB=waitforexitandrun`. The launcher returns once the game process
+  is started, so versions can be switched while the game is running.
 
 ## 5. Account and social
 
@@ -122,6 +138,8 @@ Persisted in `~/.config/cosmonarchy-plus-launcher/settings.json` (Linux) or
 `%APPDATA%\CosmonarchyPlusLauncher\settings.json` (Windows):
 
 - root path, selected repo, show unofficial repos
+- installed versions (id, name, repo id, checkout dir, optional pinned
+  commit, installed commit) and the selected version id
 - variant and netcode role
 - action on play, full version log
 - account token, installed patch ids, CrownLink asset id
@@ -129,5 +147,24 @@ Persisted in `~/.config/cosmonarchy-plus-launcher/settings.json` (Linux) or
 
 ## 8. Replays
 
-Planned: list replays from the install directory, filter, and launch the game
-with the replay argument (deep-link equivalent).
+Two tabs:
+
+- **Local files** — every `.rep` in the game's replay directory, newest first;
+  "Play selected" switches to the vanilla build, copies the file into
+  `Maps/Replays`, and launches straight into playback.
+- **Online games** — the ReplayKraken list behind cosmonarchy.com/matches
+  (`GET https://cosmonarchy.com/api/matches`, downloaded replays at
+  `/api/matches/<uuid>/download/<fileId>`). Shows the latest 20 games by
+  default; choosing a followed player shows their latest 100. Followed players
+  live in the settings (`followedPlayers`). The API returns every match in one
+  ~22 MB document with no paging parameters, so the mapped summaries are
+  cached in `~/.local/share/cosmonarchy-plus-launcher/matches-cache.json` and
+  refreshed on demand or after 10 minutes. "Watch selected" downloads the
+  replay into the replay directory and plays it like a local file; "Download
+  only" keeps it for later.
+
+Matches carry the short build SHA and channel the replay was recorded on
+(`gameVersion`, `gameVersionKind`); the page compares that with the installed
+checkout and warns when they differ — a replay only loads on its own build.
+Version-pinned switching (CosmoWatch's partial-clone store) is the next step;
+for now update or pick a matching version before watching.
