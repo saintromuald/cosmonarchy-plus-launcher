@@ -5,7 +5,41 @@ item is the one currently planned; "shipped" entries are already in the app.
 
 ## Planned
 
-### 1. Self-hosted account & statistics backend
+### 1. Plus replays on our own server (target: 2 Nov 2026)
+
+Plus games currently auto-upload to the official Replay Kraken at
+cosmonarchy.com, polluting their match list and per-player stats and confusing
+players there (Plus replays do not replay on vanilla Cosmonarchy). The fix
+moves Plus uploads to the self-hosted fork (`saintromuald/replay-kraken`) and
+keeps the official site 100% clean.
+
+**Code status** (written, uncommitted across the three repos):
+
+- gptp client (`cosmonarchy-gptp`): the upload endpoint reads
+  `replay-kraken-server` / `replay-kraken-token` / `replay-kraken-upload-all`
+  from `cosmonarchy.yml` (empty server = uploads disabled, so no build ever
+  leaks games upstream), and sends the `meta` payload — map, gameType,
+  durationFrames, matchup, and players with race/result/human-or-computer.
+- Server (`replay-kraken`): accepts `meta`, stores player type (AI games stay
+  out of vs-race stats), `/api/users/@me` compatibility endpoint, RFC 3339
+  timestamps.
+- Launcher: Settings → "Plus replay server"; the Replays, Statistics and
+  Favourites tabs merge that server's list into the Plus channel; replay
+  downloads route per match.
+
+**Left to do**
+
+- [ ] Host the server (VPS + Docker, HTTPS, `RK_TOKENS`, Discord webhook)
+- [ ] Build and ship the gptp client with the config keys (cpp-httplib ssl)
+- [ ] Set `replay-kraken-server` for Plus installs (installer or launcher
+      post-install step)
+- [ ] Commit and release the three repos
+- [ ] Pick a distinct name for the self-hosted service so players never
+      confuse it with Replay Kraken itself
+- [ ] Agree with the No-Frauds Club how pre-split Plus games already on the
+      official list are handled
+
+### 2. Self-hosted account & statistics backend
 
 Today statistics accounts live on the local machine: email + password, a
 claimed in-game name, and per-account match certifications, all stored in the
