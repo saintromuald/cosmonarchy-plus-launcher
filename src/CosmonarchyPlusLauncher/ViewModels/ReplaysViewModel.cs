@@ -629,8 +629,11 @@ public partial class ReplaysViewModel : ViewModelBase
         };
         if (match.HasDesync)
             bits.Add("⚠ This game desynced.");
-        bits.Add(IsCertified(match.MatchUuid)
-            ? "✓ Certified as yours by the statistics account."
+        var cert = AppRuntime.CurrentLocalAccount is { } certAccount
+            ? LocalAccountBackend.CertificationFor(certAccount, match.MatchUuid)
+            : null;
+        bits.Add(cert is not null
+            ? $"✓ Certified by {cert.IdentityLabel} on {cert.CertifiedAt.LocalDateTime:yyyy-MM-dd HH:mm}."
             : AppRuntime.CurrentLocalAccount is null
                 ? "Create a Statistics account to certify games as really yours."
                 : "Not certified as yours yet.");

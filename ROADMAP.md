@@ -44,8 +44,12 @@ Rules:
 - Player names are claims: registration does **not** reserve a name, because
   in-game names are not unique today. Certification is what gives a name
   authority — an account's certified matches are the identity, not the name.
-- `/api/certifications/{matchUuid}` is public: it is how one launcher verifies
-  another player's claim.
+- Every certification carries the certifier's **email and claimed name**
+  (the client already stores and displays this). The email is the
+  spoof-resistant part: anyone can copy an in-game name, but nobody can fake
+  an email that the real player publicly uses.
+- `/api/certifications/{matchUuid}` is public: it is how one launcher shows
+  *who* certified a match (name + email per certification, with timestamps).
 
 **Client work when the server exists**
 
@@ -54,7 +58,8 @@ Rules:
 - First launch prompts to "link" an existing local account (upload local
   certifications) or sign in fresh.
 - The Replays tab shows a match as certified when *any* verified account
-  certifies it (server truth) instead of only the local account.
+  certifies it (server truth) instead of only the local account, and shows
+  each certifier as "name (email)".
 
 **Deployment note**
 

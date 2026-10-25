@@ -140,18 +140,20 @@
                 <TabItem Header="Certify">
                     <Grid RowDefinitions="Auto,Auto,*">
                         <TextBlock Grid.Row="0" Text="Certify your games" FontWeight="SemiBold" />
-                        <TextBlock Grid.Row="1" Text="Check the games you really played so impostor names stop polluting your stats. Unchecked games stay searchable as uncertified."
+                        <TextBlock Grid.Row="1" Text="Check the games you really played so impostor names stop polluting your stats. Certifications record your name and email — the email is what proves who certified. Unchecked games stay searchable as uncertified."
                                    TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                                    Margin="0,2,0,4" />
                         <ListBox Grid.Row="2" ItemsSource="{Binding CertRows}">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:MatchCertRow">
-                                    <Grid ColumnDefinitions="Auto,110,*,90,50">
+                                    <Grid ColumnDefinitions="Auto,110,*,90,50,180">
                                         <CheckBox Grid.Column="0" IsChecked="{Binding IsCertified}" />
                                         <TextBlock Grid.Column="1" Text="{Binding DateLabel}" />
                                         <TextBlock Grid.Column="2" Text="{Binding OpponentsLabel}" TextTrimming="CharacterEllipsis" />
                                         <TextBlock Grid.Column="3" Text="{Binding RaceLabel}" />
                                         <TextBlock Grid.Column="4" Text="{Binding ResultLabel}" />
+                                        <TextBlock Grid.Column="5" Text="{Binding CertByLabel}" TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" Margin="8,0,0,0" />
                                     </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>

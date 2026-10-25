@@ -8,24 +8,28 @@ using CosmonarchyPlusLauncher.Services;
 namespace CosmonarchyPlusLauncher.ViewModels;
 
 /// <summary>One row of the certification checklist. The checkbox writes
-/// straight back to the account backend.</summary>
+/// straight back to the account backend; the certification record (when
+/// present) carries who certified — email + in-game name.</summary>
 public partial class MatchCertRow : ObservableObject
 {
     private readonly Func<Task> _onChanged;
 
-    public MatchCertRow(PlayerMatchEntry entry, Func<Task> onChanged)
+    public MatchCertRow(PlayerMatchEntry entry, Certification? certification, Func<Task> onChanged)
     {
         Entry = entry;
+        Certification = certification;
         _onChanged = onChanged;
         _isCertified = entry.Certified;
     }
 
     public PlayerMatchEntry Entry { get; }
+    public Certification? Certification { get; }
 
     public string DateLabel => Entry.DateLabel;
     public string OpponentsLabel => Entry.OpponentsLabel;
     public string RaceLabel => Entry.MyRace;
     public string ResultLabel => Entry.ResultLabel;
+    public string CertByLabel => Certification?.IdentityLabel ?? "";
 
     [ObservableProperty]
     private bool _isCertified;
@@ -369,8 +373,9 @@ public partial class StatisticsViewModel : ViewModelBase
         CertRows.Clear();
         foreach (var entry in entries.Take(200))
         {
+            var certification = LocalAccountBackend.CertificationFor(account, entry.Match.MatchUuid);
             MatchCertRow? row = null;
-            row = new MatchCertRow(entry, () => SetCertificationAsync(row!));
+            row = new MatchCertRow(entry, certification, () => SetCertificationAsync(row!));
             CertRows.Add(row);
         }
     }

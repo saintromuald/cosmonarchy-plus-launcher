@@ -86,17 +86,32 @@ public sealed class LocalAccountBackend : IAccountBackend
     public Task SetCertificationAsync(AccountSession session, string matchUuid, bool certified, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var uuids = session.Account.CertifiedMatchUuids;
-        uuids.RemoveAll(u => u.Equals(matchUuid, StringComparison.OrdinalIgnoreCase));
+        var account = session.Account;
+        account.Certifications.RemoveAll(c =>
+            c.MatchUuid.Equals(matchUuid, StringComparison.OrdinalIgnoreCase));
         if (certified)
-            uuids.Add(matchUuid);
+        {
+            account.Certifications.Add(new Certification
+            {
+                MatchUuid = matchUuid,
+                CertifiedAt = DateTimeOffset.Now,
+                Email = account.Email,
+                PlayerName = account.PlayerName,
+            });
+        }
         Save();
         return Task.CompletedTask;
     }
 
     /// <summary>Case-insensitive set of the account's certified match UUIDs.</summary>
     public static HashSet<string> CertifiedSet(LocalAccount account) =>
-        new(account.CertifiedMatchUuids, StringComparer.OrdinalIgnoreCase);
+        new(account.Certifications.Select(c => c.MatchUuid), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The certification record for one match, or null when the
+    /// account has not certified it. Carries who certified (email + name).</summary>
+    public static Certification? CertificationFor(LocalAccount account, string matchUuid) =>
+        account.Certifications.FirstOrDefault(c =>
+            c.MatchUuid.Equals(matchUuid, StringComparison.OrdinalIgnoreCase));
 
     // ---- internals ---------------------------------------------------------
 
@@ -141,7 +156,28 @@ public sealed class LocalAccountBackend : IAccountBackend
             {
                 var json = File.ReadAllText(_filePath);
                 var accounts = JsonSerializer.Deserialize<List<LocalAccount>>(json) ?? [];
+                var migrated = false;
+                foreach (var account in accounts)
+                {
+                    // Pre-identity account files stored bare UUID strings.
+                    if (account.Certifications.Count == 0 && account.CertifiedMatchUuids.Count > 0)
+                    {
+                        account.Certifications = account.CertifiedMatchUuids
+                            .Select(u => new Certification
+                            {
+                                MatchUuid = u,
+                                CertifiedAt = account.CreatedAt,
+                                Email = account.Email,
+                                PlayerName = account.PlayerName,
+                            })
+                            .ToList();
+                        account.CertifiedMatchUuids = [];
+                        migrated = true;
+                    }
+                }
                 _accounts = accounts;
+                if (migrated)
+                    SaveLocked(accounts);
                 return _accounts;
             }
         }
