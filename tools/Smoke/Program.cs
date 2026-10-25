@@ -83,7 +83,8 @@ public static class Program
         Console.WriteLine($"match: {match.PlayersLabel} on {match.MapName}, {match.VersionLabel}");
         var progress = new Progress<string>(s => Console.WriteLine($"  {s}"));
         var service = new ReplayWatchService(settings, kraken);
-        var build = await service.WatchAsync(match, progress, launch: launch);
+        var result = await service.WatchAsync(match, progress, launch: launch);
+        var build = result.Build;
         Console.WriteLine($"channel={build.Channel} dir={build.Dir} sha={build.FullSha[..8]} replay={match.FileName}");
         Console.WriteLine(launch ? "WATCH SMOKE OK" : "WATCH PREPARE SMOKE OK");
         return 0;

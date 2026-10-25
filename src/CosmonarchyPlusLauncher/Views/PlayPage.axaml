@@ -10,22 +10,39 @@
 
     <Grid Margin="16" RowDefinitions="Auto,*,Auto,Auto,Auto">
 
-        <TextBlock Grid.Row="0" Text="Play" FontSize="20" FontWeight="SemiBold" />
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10">
+            <TextBlock Text="Play" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding VariantHint}" VerticalAlignment="Center"
+                       FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+        </StackPanel>
 
-        <Grid Grid.Row="1" ColumnDefinitions="*,330" Margin="0,8,0,0">
+        <Grid Grid.Row="1" ColumnDefinitions="*,340" Margin="0,8,0,0">
 
-            <!-- Left: installed versions, switchable with one click. -->
-            <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
-                <TextBlock Grid.Row="0" Text="Installed versions"
+            <!-- Left: installed rows for the selected variant, switchable with
+                 one click. Builds and plugins share the list; the badge makes
+                 the family unmistakable. -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto,Auto">
+                <TextBlock Grid.Row="0" Text="{Binding InstalledHeading}"
                            FontWeight="SemiBold" Margin="0,0,0,6" />
                 <ListBox Grid.Row="1" ItemsSource="{Binding Installed}"
                          SelectedItem="{Binding SelectedInstall}"
                          Background="Transparent">
                     <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="models:GameVersion">
+                        <DataTemplate x:DataType="vm:InstalledEntry">
                             <StackPanel Spacing="2" Margin="0,3">
-                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
-                                           TextTrimming="CharacterEllipsis" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Background="{Binding BadgeBrush}" CornerRadius="3"
+                                            Padding="5,1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Badge}" FontSize="9"
+                                                   FontWeight="Bold" Foreground="White" />
+                                    </Border>
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding KindLabel}" FontSize="10"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                </StackPanel>
                                 <TextBlock Text="{Binding Summary}"
                                            Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                                            FontSize="12" TextTrimming="CharacterEllipsis" />
@@ -33,6 +50,11 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+                <TextBlock Grid.Row="1" Text="{Binding EmptyHint}" TextWrapping="Wrap"
+                           VerticalAlignment="Center" HorizontalAlignment="Center"
+                           MaxWidth="320" TextAlignment="Center"
+                           IsVisible="{Binding InstalledEmpty}"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                 <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
                     <Button Content="Play" MinWidth="110" Command="{Binding PlayCommand}"
                             IsEnabled="{Binding CanPlay}" />
@@ -40,22 +62,24 @@
                             Command="{Binding PlayRemasteredCommand}"
                             IsVisible="{Binding RemasteredVisible}" />
                     <Button Content="Update" MinWidth="110" Command="{Binding UpdateCommand}"
-                            IsEnabled="{Binding CanPlay}" />
+                            IsEnabled="{Binding CanManage}" />
                     <Button Content="Delete" MinWidth="110" Command="{Binding DeleteCommand}"
-                            IsEnabled="{Binding CanPlay}" />
-                    <TextBlock Text="Versions share the StarCraft base; each has its own build folder."
-                               FontSize="12" VerticalAlignment="Center"
-                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                            IsEnabled="{Binding CanManage}" />
                 </StackPanel>
+                <TextBlock Grid.Row="3" Text="{Binding SelectionHint}" Margin="0,6,0,0"
+                           FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
             </Grid>
 
-            <!-- Right: install a new version. Existing checkouts are never
-                 touched; every install lands in its own folder. -->
+            <!-- Right: install a new build or plugin for the selected variant.
+                 Existing checkouts are never touched; every build lands in its
+                 own folder. -->
             <Border Grid.Column="1" Margin="12,0,0,0" Padding="12"
                     Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                     CornerRadius="4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="8">
-                    <TextBlock Text="Install a new version" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding InstallHeading}" FontWeight="SemiBold" />
                     <TextBlock Text="Repository" FontSize="12"
                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                     <ComboBox ItemsSource="{Binding Repos}"
@@ -63,12 +87,19 @@
                               HorizontalAlignment="Stretch">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="models:RepoEntry">
-                                <TextBlock Text="{Binding Name}" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Badge}" FontSize="9"
+                                               VerticalAlignment="Center" Opacity="0.6" />
+                                </StackPanel>
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
                     <CheckBox Content="Show unofficial mirrors"
-                              IsChecked="{Binding ShowUnofficial}" />
+                              IsChecked="{Binding ShowUnofficial}"
+                              IsVisible="{Binding UnofficialVisible}" />
+                    <TextBlock Text="{Binding RepoHint}" FontSize="11" TextWrapping="Wrap"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                     <TextBlock Text="Version to install" FontSize="12"
                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                     <ComboBox ItemsSource="{Binding NewVersionOptions}"
@@ -87,28 +118,36 @@
                     <Button Content="Install" HorizontalAlignment="Stretch"
                             Command="{Binding InstallCommand}"
                             IsEnabled="{Binding CanInstall}" />
-                    <TextBlock Text="Each install gets its own folder, so any number of versions can coexist. Switch by selecting one and pressing Play."
+                    <TextBlock Text="The install appears in the list on the left immediately; a failed download stays listed so Update can retry it."
                                FontSize="12" TextWrapping="Wrap"
                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                 </StackPanel>
+                </ScrollViewer>
             </Border>
         </Grid>
 
-        <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,Auto,*" Margin="0,8,0,0">
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                <TextBlock Text="Variant:" VerticalAlignment="Center" />
-                <ComboBox ItemsSource="{Binding Variants}"
-                          SelectedItem="{Binding Variant}" MinWidth="120" />
-                <TextBlock Text="Role:" VerticalAlignment="Center" />
-                <ComboBox ItemsSource="{Binding Roles}"
-                          SelectedItem="{Binding Role}" MinWidth="120" />
-            </StackPanel>
-            <Button Grid.Column="2" Content="Refresh versions" Margin="12,0,0,0"
-                    Command="{Binding RefreshCommand}" />
-            <Button Grid.Column="3" Content="Fetch full version log" HorizontalAlignment="Right"
-                    Command="{Binding UnshallowCommand}"
-                    IsEnabled="{Binding CanInstall}" />
-        </Grid>
+        <Border Grid.Row="2" Margin="0,10,0,0" Padding="10"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                CornerRadius="4">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="Variant:" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding Variants}"
+                              SelectedItem="{Binding Variant}" MinWidth="150" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="14,0,0,0"
+                            IsVisible="{Binding RoleVisible}">
+                    <TextBlock Text="Role:" VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding Roles}"
+                              SelectedItem="{Binding Role}" MinWidth="120" />
+                </StackPanel>
+                <Button Grid.Column="2" Content="Refresh versions" Margin="14,0,0,0"
+                        Command="{Binding RefreshCommand}" />
+                <Button Grid.Column="4" Content="Fetch full version log"
+                        Command="{Binding UnshallowCommand}"
+                        IsEnabled="{Binding CanInstall}" />
+            </Grid>
+        </Border>
 
         <Border Grid.Row="3" Margin="0,10,0,0" Padding="10"
                 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
@@ -127,7 +166,7 @@
                 IsVisible="{Binding ShowRemasteredUnlock}">
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBox Text="{Binding RemasteredPassword}" PasswordChar="•"
-                         Watermark="Access password" MinWidth="200" />
+                         PlaceholderText="Access password" MinWidth="200" />
                 <Button Content="Unlock" Command="{Binding UnlockRemasteredCommand}"
                         MinWidth="90" />
                 <TextBlock Text="{Binding RemasteredStatus}" VerticalAlignment="Center"

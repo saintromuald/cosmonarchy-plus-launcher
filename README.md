@@ -21,8 +21,8 @@ the Avalonia UI is scaffolded but not yet wired.
 | Area | State |
 | --- | --- |
 | Repo install/update + version pick | Working (live-prefix smoke tested) |
-| Multiple installed versions (install, pin, switch, delete) | Working (smoke tested) |
-| Play + variants (Original/Plus/Netcode) | Working (Linux launch via `umu-run`; Windows path written) |
+| Multiple installed versions (install, pin, switch, delete) | Working (smoke tested); grouped and filtered by Original/Plus/Netcode |
+| Play + variants (Original/Plus/Netcode) | Working (Linux launch via `umu-run`; Windows path written); plugin packages install into `variants` |
 | Patch pipeline (StarCraft, patches.yml, CrownLink) | Working (smoke tested) |
 | Account + community | cosmonarchy.com device login, profile, website and Discord links |
 | Replays tab | OG/Plus online lists with per-tab search, race/matchup and team-size filters, follow players, show-more paging; desynced games flagged red; favourites with add dates, watched history, private/shared notes with tags, named + titled saved lists; Following tab groups everyone you follow with their OG/Plus games; watch any game in one click |

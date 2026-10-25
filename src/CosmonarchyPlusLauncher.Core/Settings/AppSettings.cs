@@ -25,6 +25,10 @@ public sealed class AppSettings
     /// and by the install form in the UI.</summary>
     public List<GameVersion> Versions { get; set; } = [];
 
+    /// <summary>Installed plugin builds (the Plus and Netcode families).
+    /// Each record owns the .qdp files it put in the variants directory.</summary>
+    public List<PluginVersion> Plugins { get; set; } = [];
+
     /// <summary>Which installed version the Play/Update/Delete buttons and
     /// the Replays page act on.</summary>
     public string? SelectedVersionId { get; set; }
@@ -156,4 +160,10 @@ public static class PlatformDefaults
             : Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".config", "cosmonarchy-plus-launcher", "settings.json");
+
+    /// <summary>Per-user data directory (caches, library, logs).</summary>
+    public static string DataDir() =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "cosmonarchy-plus-launcher");
 }

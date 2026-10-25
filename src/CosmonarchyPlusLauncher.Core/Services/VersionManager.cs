@@ -27,6 +27,14 @@ public sealed class VersionManager
 
     public IReadOnlyList<GameVersion> Versions => _settings.Versions;
 
+    /// <summary>Game versions belonging to a variant family. Legacy records
+    /// without a stored variant use their repository's family.</summary>
+    public IReadOnlyList<GameVersion> VersionsFor(Variant variant) =>
+        Versions.Where(v => v.EffectiveVariant == variant).ToList();
+
+    public IReadOnlyList<PluginVersion> PluginsFor(Variant variant) =>
+        _settings.Plugins.Where(p => p.Variant == variant).ToList();
+
     /// <summary>The version the play/update/delete actions act on: the
     /// persisted selection, or the first installed version as a fallback.</summary>
     public GameVersion? Selected =>
@@ -89,8 +97,10 @@ public sealed class VersionManager
                     : Prettify(Path.GetFileName(dir)),
                 RepoId = repo.Id,
                 Dir = dir,
+                Variant = repo.Variant,
             };
             EnsureUniqueId(version, Versions);
+            EnsureUniqueName(version, Versions);
             RecordHead(version, repo);
             _settings.Versions.Add(version);
             adopted++;
@@ -106,11 +116,14 @@ public sealed class VersionManager
 
     /// <summary>Build the record for a new install without touching the
     /// disk: a unique id and a checkout dir under versions/. The name
-    /// defaults to "{repo name} — Latest" or "{repo name} — {sha8}".</summary>
-    public GameVersion CreateNew(RepoEntry repo, string? pinnedSha, string? requestedName)
+    /// defaults to "{repo name} — Latest" or "{repo name} — {sha8}" and is
+    /// de-duplicated when the same repo is installed again.</summary>
+    public GameVersion CreateNew(RepoEntry repo, string? pinnedSha, string? requestedName,
+        Variant? variant = null)
     {
+        var family = variant ?? repo.Variant;
         var name = string.IsNullOrWhiteSpace(requestedName)
-            ? DefaultName(repo, pinnedSha)
+            ? DefaultName(repo, pinnedSha, family)
             : requestedName.Trim();
         var version = new GameVersion
         {
@@ -118,30 +131,53 @@ public sealed class VersionManager
             Name = name,
             RepoId = repo.Id,
             PinnedSha = pinnedSha,
+            Variant = family,
         };
         EnsureUniqueId(version, Versions);
+        EnsureUniqueName(version, Versions);
         version.Dir = Path.Combine("versions", version.Id).Replace('\\', '/');
         return version;
     }
 
-    /// <summary>Install a brand-new version: ensure the shared base, clone
-    /// (or fetch and pin) the game repo into its own directory, and record
-    /// it as the selected version.</summary>
-    public async Task InstallAsync(
+    /// <summary>Install a brand-new version: record it first (so it appears
+    /// in the installed list immediately, with "not downloaded yet"), then
+    /// ensure the shared base, clone (or fetch and pin) the game repo into
+    /// its own directory, and select it.
+    ///
+    /// A failed clone leaves the record in place: the failure is reported to
+    /// the caller, and pressing Update retries instead of losing the entry.</summary>
+    public async Task<GameVersion> InstallAsync(
         RepoEntry repo,
         string? pinnedSha,
         string? requestedName,
         IProgress<string>? progress = null,
         string? mapsUrl = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Variant? variant = null)
     {
-        var version = CreateNew(repo, pinnedSha, requestedName);
-        var service = new InstallService(_settings, repo, version, mapsUrl);
-        await service.InstallAsync(progress, ct);
-        RecordHead(version, repo);
+        var version = CreateNew(repo, pinnedSha, requestedName, variant);
         _settings.Versions.Add(version);
         _settings.SelectedVersionId = version.Id;
         _settings.Save();
+        DiagnosticsLog.Info($"install start: {version.Name} ({repo.Id} → {version.Dir})");
+
+        try
+        {
+            var service = new InstallService(_settings, repo, version, mapsUrl);
+            await service.InstallAsync(progress, ct);
+            RecordHead(version, repo);
+            DiagnosticsLog.Info($"install done: {version.Name} @ {version.InstalledSha}");
+            return version;
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsLog.Error($"install failed: {version.Name}", ex);
+            throw;
+        }
+        finally
+        {
+            _settings.Save();
+        }
     }
 
     /// <summary>Update one version: tracked versions fetch and move to the
@@ -245,10 +281,44 @@ public sealed class VersionManager
         return null;
     }
 
-    public static string DefaultName(RepoEntry repo, string? pinnedSha) =>
-        pinnedSha is null
-            ? $"{repo.Name} — Latest"
-            : $"{repo.Name} — {pinnedSha[..Math.Min(8, pinnedSha.Length)]}";
+    public static string DefaultName(RepoEntry repo, string? pinnedSha, Variant? variant = null)
+    {
+        var family = variant ?? repo.Variant;
+        // Only spell the variant out when it differs from the repository's own
+        // family (a Netcode install of a Plus build), so ordinary names stay
+        // short while the list can still tell the two apart.
+        var suffix = family == repo.Variant ? "" : $" — {family}";
+        return pinnedSha is null
+            ? $"{repo.Name}{suffix} — Latest"
+            : $"{repo.Name}{suffix} — {pinnedSha[..Math.Min(8, pinnedSha.Length)]}";
+    }
+
+    /// <summary>Two installs of the same repo used to produce identical
+    /// display names, which made the list look like the new install never
+    /// appeared. Rename duplicates to " (2)", " (3)", … once, without moving
+    /// any checkout. Returns true when a record changed.</summary>
+    public bool NormalizeDuplicateNames()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var changed = false;
+        foreach (var version in Versions)
+        {
+            if (seen.Add(version.Name))
+                continue;
+            var baseName = version.Name;
+            for (var n = 2; ; n++)
+            {
+                var candidate = $"{baseName} ({n})";
+                if (seen.Add(candidate))
+                {
+                    version.Name = candidate;
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        return changed;
+    }
 
     private RepoEntry RequireRepo(GameVersion version) =>
         ResolveRepo(version.RepoId)
@@ -268,20 +338,47 @@ public sealed class VersionManager
     {
         if (!Repository.IsValid(dir))
             return null;
+
+        var matches = new List<RepoEntry>();
         foreach (var entry in gameRepos)
         {
             try
             {
                 using var manager = new RepoManager(dir, entry.Url);
                 if (manager.IsInstalled())
-                    return entry;
+                    matches.Add(entry);
             }
             catch (LibGit2SharpException)
             {
             }
         }
-        return null;
+        if (matches.Count <= 1)
+            return matches.FirstOrDefault();
+
+        // One checkout often carries several matching remotes (the upstream
+        // origin plus the fork). Prefer the repository whose branch is
+        // checked out — the Release checkout on `plus` is a Plus build, not
+        // the upstream release — then the clone's origin remote.
+        using var repo = new Repository(dir);
+        var branch = repo.Info.IsHeadDetached ? null : repo.Head.FriendlyName;
+        var byBranch = branch is null
+            ? new List<RepoEntry>()
+            : matches.Where(m => string.Equals(m.Branch, branch, StringComparison.OrdinalIgnoreCase)).ToList();
+        var pool = byBranch.Count > 0 ? byBranch : matches;
+
+        var origin = repo.Network.Remotes["origin"]?.Url;
+        if (origin is not null)
+        {
+            var byOrigin = pool.Where(m =>
+                string.Equals(NormalizeUrl(m.Url), NormalizeUrl(origin), StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (byOrigin.Count > 0)
+                return byOrigin[0];
+        }
+        return pool[0];
     }
+
+    private static string NormalizeUrl(string url) => url.TrimEnd('/', '\\');
 
     private void RecordHead(GameVersion version, RepoEntry? repo = null)
     {
@@ -318,6 +415,26 @@ public sealed class VersionManager
                 // Id only: the directory mapping is the caller's concern
                 // (adopted legacy checkouts keep their own directories).
                 version.Id = candidate;
+                return;
+            }
+        }
+    }
+
+    /// <summary>Two installs of the same repo used to produce identical
+    /// display names, which made the list look like the new install never
+    /// appeared. Suffix repeats with " (2)", " (3)", ….</summary>
+    private static void EnsureUniqueName(GameVersion version, IEnumerable<GameVersion> existing)
+    {
+        var names = existing.Select(v => v.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!names.Contains(version.Name))
+            return;
+        var baseName = version.Name;
+        for (var n = 2; ; n++)
+        {
+            var candidate = $"{baseName} ({n})";
+            if (!names.Contains(candidate))
+            {
+                version.Name = candidate;
                 return;
             }
         }

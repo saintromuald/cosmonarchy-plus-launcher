@@ -9,8 +9,8 @@
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
         Title="{Binding Title}"
-        Width="900" Height="620"
-        MinWidth="720" MinHeight="520">
+        Width="1000" Height="780"
+        MinWidth="720" MinHeight="560">
 
     <Design.DataContext>
         <vm:MainViewModel />
