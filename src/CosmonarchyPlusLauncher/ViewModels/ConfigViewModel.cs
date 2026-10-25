@@ -279,7 +279,7 @@ public partial class ConfigViewModel : ViewModelBase
                     - QWE
                     - ASD
                     - ZXC
-                # Adds extra control groups at R, F, V, T, G, B. Must be used with grid hotkeys!
+                # Adds extra control groups at R, F, V, T, G, B, Y, H, N. Must be used with grid hotkeys!
                 extended-control-groups: true
                 default-to-steal-hotkeys: false
                 # Replaces tilde with an additional control group, moves console to F12
