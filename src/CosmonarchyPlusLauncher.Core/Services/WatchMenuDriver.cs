@@ -11,7 +11,9 @@ namespace CosmonarchyPlusLauncher.Core.Services;
 /// Single Player → (profile dialog: Ok) → Watch Replay → last file → open.
 ///
 /// Linux/Hyprland only: the game window is focused by address through
-/// <c>hl.dsp.focus</c>, then keys are typed with <c>wtype</c>.</summary>
+/// <c>hl.dsp.focus</c>, then keys are typed with <c>wtype</c>. Every step is
+/// photographed (grim + tesseract) into the launcher data directory so a
+/// missed step can be diagnosed after the fact.</summary>
 public sealed class WatchMenuDriver
 {
     /// <summary>Prefix that sorts after every ordinary replay name, so the
@@ -36,18 +38,70 @@ public sealed class WatchMenuDriver
         }
 
         progress?.Report("Opening the replay in-game (no clicks needed)…");
-        Focus(address);
-        await Delay(ct, 2000);
-        Type("s");                       // Single Player
-        await Delay(ct, 3000);
-        Type("Return");                  // profile dialog: Ok
-        await Delay(ct, 3000);
-        Type("w");                       // Watch Replay
-        await Delay(ct, 3000);
-        Type("End");                     // jump to the last file (our zzz-watch entry)
-        await Delay(ct, 600);
-        Type("Return");                  // open it
+        await PressAsync(address, "s", ct, 2200, 3000, "main-menu-single-player");
+        await PressAsync(address, "Return", ct, 600, 3000, "profile-dialog-ok");
+        await PressAsync(address, "w", ct, 900, 3000, "single-player-watch-replay");
+        await PressAsync(address, "End", ct, 400, 800, "replay-list-last-file");
+        await PressAsync(address, "Return", ct, 400, 800, "replay-list-open");
         progress?.Report($"Watching {replayFileName}.");
+    }
+
+    /// <summary>Refocus the game window, send the key twice (menu transitions
+    /// sometimes eat the first press), and photograph the screen afterwards.</summary>
+    private static async Task PressAsync(
+        string address, string key, CancellationToken ct, int betweenMs, int afterMs, string step)
+    {
+        Focus(address);
+        await Task.Delay(betweenMs, ct);
+        Type(key);
+        await Task.Delay(350, ct);
+        Type(key);
+        await Task.Delay(afterMs, ct);
+        Snapshot(step);
+    }
+
+    /// <summary>grim + tesseract: photograph the screen and OCR it into the
+    /// launcher data directory so the step's outcome can be checked later.</summary>
+    private static void Snapshot(string step)
+    {
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "cosmonarchy-plus-launcher", "watch-steps");
+            Directory.CreateDirectory(dir);
+            var png = Path.Combine(dir, $"{DateTime.Now:yyyyMMdd-HHmmss}-{step}.png");
+            var txt = png + ".txt";
+            RunSilent("/usr/bin/grim", "-t", "png", png);
+            if (!File.Exists(png))
+                return;
+            RunSilent("/usr/bin/tesseract", png, txt[..^4]); // writes <base>.txt
+        }
+        catch
+        {
+            // Diagnosis aid only; never fail the watch over it.
+        }
+    }
+
+    private static void RunSilent(string file, params string[] args)
+    {
+        try
+        {
+            var info = new ProcessStartInfo(file)
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            foreach (var a in args)
+                info.ArgumentList.Add(a);
+            using var proc = Process.Start(info);
+            proc?.WaitForExit(3000);
+        }
+        catch
+        {
+            // Optional tooling (grim/tesseract) missing: skip the snapshot.
+        }
     }
 
     /// <summary>Polls hyprctl clients for the game window and returns its
@@ -138,18 +192,6 @@ public sealed class WatchMenuDriver
         catch
         {
             // wtype missing: the game stays on its menu; the replay is staged.
-        }
-    }
-
-    private static async Task Delay(CancellationToken ct, int ms)
-    {
-        try
-        {
-            await Task.Delay(ms, ct);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
         }
     }
 }
