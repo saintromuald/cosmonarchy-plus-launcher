@@ -9,18 +9,18 @@ using YamlDotNet.RepresentationModel;
 
 namespace CosmonarchyPlusLauncher.ViewModels;
 
-/// <summary>One editable Cosmonarchy Plus config file inside a version's
-/// checkout. The game reads plus.yml and cosmo_plus.conf from its own
-/// directory first, then from plugins/ (see the Plus plugin's config.rs),
-/// so the editor offers all four locations.</summary>
-public sealed record ConfigFileOption(string Label, string RelativePath)
+/// <summary>One editable config file. <see cref="IsGameConfig"/> files live
+/// next to StarCraft.exe in the shared Starcraft folder (cosmonarchy.yml);
+/// the others live inside the selected version's checkout and are read by
+/// the Plus plugin (game directory first, then plugins/).</summary>
+public sealed record ConfigFileOption(string Label, string RelativePath, bool IsGameConfig = false)
 {
     public override string ToString() => Label;
 }
 
-/// <summary>The Config tab: edit the Plus gameplay config (plus.yml cost
-/// overrides, gas-tier deltas, advanced-worker tuning, ultraload) and the
-/// env-style cosmo_plus.conf for the selected installed version.</summary>
+/// <summary>The Config tab: edit the game's own config (cosmonarchy.yml —
+/// hotkeys, random races, UI toggles, colors) and the Plus plugin's files
+/// (plus.yml cost overrides and cosmo_plus.conf env-style switches).</summary>
 public partial class ConfigViewModel : ViewModelBase
 {
     private readonly AppSettings _settings = AppRuntime.Settings;
@@ -30,6 +30,7 @@ public partial class ConfigViewModel : ViewModelBase
 
     public IReadOnlyList<ConfigFileOption> Files { get; } =
     [
+        new ConfigFileOption("cosmonarchy.yml (game settings — hotkeys, races, UI)", "cosmonarchy.yml", IsGameConfig: true),
         new ConfigFileOption("plus.yml (game directory)", "plus.yml"),
         new ConfigFileOption("plus.yml (plugins/)", Path.Combine("plugins", "plus.yml")),
         new ConfigFileOption("cosmo_plus.conf (game directory)", "cosmo_plus.conf"),
@@ -40,7 +41,10 @@ public partial class ConfigViewModel : ViewModelBase
     private GameVersion? _selectedInstall;
 
     [ObservableProperty]
-    private ConfigFileOption _selectedFile = new("plus.yml (game directory)", "plus.yml");
+    [NotifyPropertyChangedFor(nameof(IsGameConfigSelected))]
+    [NotifyPropertyChangedFor(nameof(CanEdit))]
+    private ConfigFileOption _selectedFile = new("cosmonarchy.yml (game settings — hotkeys, races, UI)", "cosmonarchy.yml", IsGameConfig: true);
+
     [ObservableProperty]
     private string _configText = "";
 
@@ -50,21 +54,29 @@ public partial class ConfigViewModel : ViewModelBase
     [ObservableProperty]
     private bool _hasChanges;
 
-    /// <summary>The edited file's absolute path, or null when no version is
-    /// selected. The file itself may not exist yet.</summary>
-    public string? ConfigPath =>
-        SelectedInstall is null
-            ? null
-            : Path.Combine(_settings.RootPath, SelectedInstall.Dir, SelectedFile.RelativePath);
+    /// <summary>The edited file's absolute path, or null when it cannot be
+    /// resolved (no version selected for a per-version file). The file
+    /// itself may not exist yet.</summary>
+    public string? ConfigPath
+    {
+        get
+        {
+            if (SelectedFile.IsGameConfig)
+                return Path.Combine(_settings.RootPath, "Starcraft", SelectedFile.RelativePath);
+            return SelectedInstall is null
+                ? null
+                : Path.Combine(_settings.RootPath, SelectedInstall.Dir, SelectedFile.RelativePath);
+        }
+    }
+
+    public bool IsGameConfigSelected => SelectedFile.IsGameConfig;
+
+    /// <summary>The shared game config needs no version; the Plus files do.</summary>
+    public bool CanEdit => IsGameConfigSelected || SelectedInstall is not null;
 
     /// <summary>What was on disk when the editor loaded ("" = no file yet);
     /// HasChanges compares against this, not against the example seed.</summary>
     private string? _loadedText;
-
-    /// <summary>True once a file exists for the current selection.</summary>
-    public bool FileExists => !string.IsNullOrEmpty(ConfigPath) && File.Exists(ConfigPath);
-
-    public bool CanEdit => SelectedInstall is not null;
 
     public ConfigViewModel()
     {
@@ -96,14 +108,11 @@ public partial class ConfigViewModel : ViewModelBase
 
     partial void OnConfigTextChanged(string value)
     {
-        if (!string.Equals(value, _loadedText, StringComparison.Ordinal))
-            HasChanges = true;
-        else
-            HasChanges = false;
+        HasChanges = !string.Equals(value, _loadedText, StringComparison.Ordinal);
     }
 
     /// <summary>Read the selected file back from disk (or seed the editor
-    /// from the example config when the file does not exist yet).</summary>
+    /// from a template when the file does not exist yet).</summary>
     [RelayCommand]
     private void Load()
     {
@@ -118,7 +127,7 @@ public partial class ConfigViewModel : ViewModelBase
             ConfigText = "";
             _loadedText = "";
             HasChanges = false;
-            Status = "Install a version on the Play tab first — its config lives inside its checkout.";
+            Status = "Install a version on the Play tab first — the Plus config files live inside its checkout.";
             return;
         }
 
@@ -132,18 +141,20 @@ public partial class ConfigViewModel : ViewModelBase
         }
         else
         {
-            // Seed the editor with the example so a fresh checkout does not
+            // Seed the editor with a template so a fresh install does not
             // start from a blank buffer; the file is only written on Save.
             _loadedText = "";
-            ConfigText = ExampleContent();
+            ConfigText = TemplateFor(path);
             HasChanges = true;
-            Status = $"No {Path.GetFileName(path)} in {SelectedInstall!.Name} yet — seeded from the example; Save creates it.";
+            var where = IsGameConfigSelected
+                ? "the Starcraft folder (the game creates it with defaults on launch)"
+                : SelectedInstall?.Name ?? "the version";
+            Status = $"No {Path.GetFileName(path)} in {where} yet — seeded from a template; Save creates it.";
         }
-        OnPropertyChanged(nameof(FileExists));
     }
 
     /// <summary>Write the editor content to the selected file. Invalid YAML
-    /// is rejected so a typo can never break the game's config parsing.</summary>
+    /// is rejected so a typo can never break the game's config parser.</summary>
     [RelayCommand]
     private void Save()
     {
@@ -163,7 +174,9 @@ public partial class ConfigViewModel : ViewModelBase
             File.WriteAllText(path, ConfigText);
             _loadedText = ConfigText;
             HasChanges = false;
-            Status = $"Saved {path}.";
+            Status = IsGameConfigSelected
+                ? $"Saved {path}. Close the game first when editing — it rewrites this file on exit."
+                : $"Saved {path}. The plugin reads it at launch; restart the game to apply changes.";
         }
         catch (Exception ex)
         {
@@ -191,57 +204,105 @@ public partial class ConfigViewModel : ViewModelBase
         }
     }
 
-    private static string FileExistsText(string path)
+    private string FileExistsText(string path)
     {
         var name = Path.GetFileName(path);
+        if (IsGameConfigSelected)
+            return $"Loaded {name} (Starcraft folder — shared by every installed version). Close the game before editing: it rewrites this file when it exits.";
         var where = Path.GetDirectoryName(path)?.EndsWith("plugins", StringComparison.Ordinal) == true
             ? "plugins/"
             : "game directory";
         return $"Loaded {name} ({where}). The game reads it at launch; restart the game to apply changes.";
     }
 
-    /// <summary>The example config shipped with the Plus plugin project, used
-    /// to seed new files. Falls back to a minimal skeleton.</summary>
-    private static string ExampleContent()
+    /// <summary>A template for files that do not exist yet: the Plus example
+    /// config for plus.yml, a commented skeleton otherwise.</summary>
+    private string TemplateFor(string path)
     {
-        var example = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            "Projects", "cosmonarchy-plus", "plus", "plus.yml");
-        try
+        if (Path.GetFileName(path) == "plus.yml")
         {
-            if (File.Exists(example))
-                return File.ReadAllText(example);
+            var example = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Projects", "cosmonarchy-plus", "plus", "plus.yml");
+            try
+            {
+                if (File.Exists(example))
+                    return File.ReadAllText(example);
+            }
+            catch (IOException)
+            {
+            }
         }
-        catch (IOException)
+
+        if (IsGameConfigSelected)
         {
+            return """
+                # Cosmonarchy config — cosmonarchy.yml
+                # Lives next to StarCraft.exe and is shared by every installed version.
+                # The game writes this file with its defaults on launch if it is missing.
+
+                # Random settings
+                # Possible values: Zerg, Terran, Protoss, Askosi, All, Original
+                # You must select at least two values or All will be used
+                random-races:
+                  - All
+                avoid-mirror-races: true
+
+                # Replay Kraken (self-hosted fork)
+                replay-kraken-server: http://cosmonarchy.com
+                replay-kraken-token: ""
+                replay-kraken-upload-all: false
+
+                # Launch settings
+                disable-wmode-prompt: true
+                prefer-wmode: false
+                allow-multiple-instances: false
+
+                # Localization
+                # BCP47 language tag, e.g. ko-KR. Missing translations fall back to English
+                language: en-US
+
+                # General UI
+                extended-camera-hotkeys: true
+                show-timer: true
+                show-apm: true
+                show-perf-stats: false
+                always-show-extended-tooltips: false
+                suppress-windows-key: false
+
+                # Hotkeys
+                quick-casting: false
+                quick-building: false
+                grid-hotkeys:
+                  enabled: true
+                  layout:
+                    - QWE
+                    - ASD
+                    - ZXC
+                # Adds extra control groups at R, F, V, T, G, B. Must be used with grid hotkeys!
+                extended-control-groups: true
+                default-to-steal-hotkeys: false
+                # Replaces tilde with an additional control group, moves console to F12
+                tilde-control-group: true
+                flip-attack-and-patrol: true
+
+                # Replays
+                auto-save-replays: true
+                sanitize-replay-chat: false
+
+                # Maps
+                # Use single backslashes for paths!
+                # The map directory must be within Starcraft's 'maps' folder.
+                default-map-directory: CMBW-Root\CMBW-maps
+                """;
         }
+
         return """
-            # Cosmonarchy Plus gameplay config (plus.yml).
-            # See plus.yml.example in the plugin project for every key.
+            # Cosmonarchy Plus env-style config (cosmo_plus.conf).
+            # The plugin reads the game directory first, then plugins/.
 
-            # Absolute unit cost overrides (minerals / gas / build_time in frames):
-            overrides:
-              # - unit: Zerg Mutath Spire
-              #   minerals: 250
-              #   gas: 300
-
-            # Gas extractor deltas per public tier:
-            # gas_tier_deltas:
-            #   "1":
-            #     minerals: -100
-            #     build_time_seconds: -10
-
-            # Advanced (tier-2) worker tuning:
-            # advanced_workers:
-            #   minerals_delta: 0
-            #   gas_delta: 0
-            #   build_time_delta_seconds: 0
-
-            # Ultraload — tier-2 worker passive:
-            # ultraload:
-            #   enabled: true
-            #   speed_multiplier: 1.5
-            #   depot_radius_px: 480
+            # Mode switch (explicit; overrides the lobby game type):
+            # mode: antimeta
             """;
     }
 }
