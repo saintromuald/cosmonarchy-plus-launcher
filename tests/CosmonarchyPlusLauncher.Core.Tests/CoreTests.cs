@@ -1359,6 +1359,36 @@ public class CoreTests
         Assert.Equal("human", stats.TopOpponents[0].Name);
     }
 
+    [Fact]
+    public void Statistics_head_to_head_lists_only_games_between_both_names()
+    {
+        var matches = new[]
+        {
+            StatMatch("h2h-1", 0,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("rival", "Terran", "Human", 100, 1)),
+            StatMatch("h2h-2", 1,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("rival", "Protoss", "Human", 100, 1)),
+            StatMatch("h2h-3", 0,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("other", "Terran", "Human", 100, 1)),
+            // rival playing someone else entirely
+            StatMatch("h2h-4", 0,
+                new OnlinePlayer("stranger", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("rival", "Terran", "Human", 100, 1)),
+        };
+        var certified = new HashSet<string> { "h2h-1" };
+
+        var history = StatisticsService.HeadToHead(matches, "me", "RIVAL", certified);
+
+        Assert.Equal(2, history.Count);
+        Assert.All(history, e => Assert.Contains(e.Opponents, o => o.Name == "rival"));
+        Assert.Equal("h2h-1", history[0].Match.MatchUuid); // newest first
+        Assert.True(history[0].Certified);
+        Assert.False(history[1].Certified);
+    }
+
     // ---- Local accounts ----------------------------------------------------
 
     [Fact]

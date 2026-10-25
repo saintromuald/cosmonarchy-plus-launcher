@@ -77,6 +77,30 @@ public sealed record MapRow(MapStats Stats)
     public string WinRate => Stats.WinRateLabel;
 }
 
+/// <summary>One game in the head-to-head history behind an opponent row:
+/// the matchup, result, map, length and badges (desync, certified).</summary>
+public sealed record OpponentMatchRow(PlayerMatchEntry Entry, string OpponentRace)
+{
+    public string DateLabel => Entry.Match.DateLabel;
+    public string MyRace => Entry.MyRace;
+    public string MatchupLabel => $"{ShortRace(Entry.MyRace)} vs {ShortRace(OpponentRace)}";
+    public string ResultLabel => Entry.ResultLabel;
+    public string MapLabel => Entry.Match.MapName;
+    public string DurationLabel => Entry.Match.DurationLabel;
+    public string Badges => string.Concat(
+        Entry.Match.HasDesync ? "⚠ " : "",
+        Entry.Certified ? "✓" : "");
+
+    private static string ShortRace(string race) => race switch
+    {
+        "Terran" => "T",
+        "Protoss" => "P",
+        "Zerg" => "Z",
+        "Askosi" => "A",
+        _ => "O",
+    };
+}
+
 /// <summary>One stored account offered by the switcher. Accounts on this
 /// machine were authenticated when they were added, so switching between
 /// them does not ask for the password again.</summary>
@@ -262,6 +286,8 @@ public partial class StatisticsViewModel : ViewModelBase
             IsAuthMode = true;
             ClearStats();
         }
+        IsOpponentDetailOpen = false;
+        SelectedOpponent = null;
         RebuildAccounts();
         if (AppRuntime.CurrentLocalAccount is not null)
             _ = SyncAsync();
@@ -308,6 +334,52 @@ public partial class StatisticsViewModel : ViewModelBase
     [ObservableProperty] private string _averageDurationLabel = "—";
     [ObservableProperty] private string _certificationLabel = "—";
     [ObservableProperty] private string _syncLabel = "Statistics are computed from cosmonarchy.com (ReplayKraken) matches that include your claimed name.";
+
+    // ---- Opponent history (head-to-head) -----------------------------------
+
+    [ObservableProperty] private OpponentRow? _selectedOpponent;
+
+    /// <summary>True while the head-to-head history of one opponent is open
+    /// (double-clicked); the opponents list hides behind it.</summary>
+    [ObservableProperty] private bool _isOpponentDetailOpen;
+
+    [ObservableProperty] private string _opponentDetailHeader = "";
+    [ObservableProperty] private string _opponentDetailSummary = "";
+
+    public ObservableCollection<OpponentMatchRow> OpponentMatches { get; } = [];
+
+    /// <summary>Open every game between the active account and one opponent.
+    /// Called from the double-click handler and the "View games" button.</summary>
+    public void OpenOpponent(OpponentRow? row)
+    {
+        if (row is null || AppRuntime.CurrentLocalAccount is not { } account)
+            return;
+        var certified = LocalAccountBackend.CertifiedSet(account);
+        var entries = StatisticsService.HeadToHead(_matches, account.PlayerName, row.Name, certified);
+
+        OpponentMatches.Clear();
+        foreach (var entry in entries)
+        {
+            var oppRace = entry.Opponents.FirstOrDefault(o =>
+                    o.Name.Equals(row.Name, StringComparison.OrdinalIgnoreCase))?.Race
+                ?? "Unknown";
+            OpponentMatches.Add(new OpponentMatchRow(entry, oppRace));
+        }
+
+        OpponentDetailHeader = $"History vs {row.Name}";
+        OpponentDetailSummary = $"{row.Games} games · {row.Wins} wins · {row.Losses} losses · win rate {row.WinRate}";
+        IsOpponentDetailOpen = true;
+    }
+
+    [RelayCommand]
+    private void ViewOpponentGames() => OpenOpponent(SelectedOpponent);
+
+    [RelayCommand]
+    private void CloseOpponent()
+    {
+        IsOpponentDetailOpen = false;
+        SelectedOpponent = null;
+    }
 
     partial void OnSelectedFilterChanged(CertificationFilter value) => Rebuild();
     partial void OnSearchChanged(string value) => RebuildCertList();
