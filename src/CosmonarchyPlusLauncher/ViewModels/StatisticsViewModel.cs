@@ -77,6 +77,14 @@ public sealed record MapRow(MapStats Stats)
     public string WinRate => Stats.WinRateLabel;
 }
 
+/// <summary>One stored account offered by the switcher. Accounts on this
+/// machine were authenticated when they were added, so switching between
+/// them does not ask for the password again.</summary>
+public sealed record AccountOption(LocalAccount Account)
+{
+    public string Label => $"{Account.Email} — {Account.PlayerName}";
+}
+
 public partial class StatisticsViewModel : ViewModelBase
 {
     private readonly LocalAccountBackend _backend = (LocalAccountBackend)AppRuntime.AccountBackend;
@@ -99,11 +107,54 @@ public partial class StatisticsViewModel : ViewModelBase
     [ObservableProperty] private string _status = "";
     [ObservableProperty] private bool _busy;
 
+    /// <summary>True while the login / create-account form is showing (no
+    /// account active, the user logged out, or they pressed "Add account").</summary>
+    [ObservableProperty] private bool _isAuthMode = true;
+
+    /// <summary>All accounts stored on this machine — the switcher list.</summary>
+    public ObservableCollection<AccountOption> Accounts { get; } = [];
+
+    [ObservableProperty] private AccountOption? _selectedAccount;
+
     public bool IsLoggedIn => AppRuntime.CurrentLocalAccount is not null;
+
+    public bool HasStoredAccounts => Accounts.Count > 0;
+
+    /// <summary>The auth form can be dismissed when an account is still
+    /// active behind it (the "Add account" flow).</summary>
+    public bool CanCancelAuth => AppRuntime.CurrentLocalAccount is not null;
 
     public string AccountLabel => AppRuntime.CurrentLocalAccount is { } a
         ? $"{a.Email} · claims “{a.PlayerName}” · created {a.CreatedLabel}"
         : "";
+
+    partial void OnSelectedAccountChanged(AccountOption? value)
+    {
+        // In the auth form the selection is a pending choice for
+        // "Continue as selected"; elsewhere it switches immediately.
+        if (value is null || IsAuthMode)
+            return;
+        if (AppRuntime.CurrentLocalAccount?.Id == value.Account.Id)
+            return;
+        AppRuntime.SetLocalAccount(value.Account);
+    }
+
+    [RelayCommand]
+    private void AddAccount() => IsAuthMode = true;
+
+    [RelayCommand]
+    private void CancelAuth()
+    {
+        if (AppRuntime.CurrentLocalAccount is not null)
+            IsAuthMode = false;
+    }
+
+    [RelayCommand]
+    private void ContinueAs()
+    {
+        if (SelectedAccount is { } option)
+            AppRuntime.SetLocalAccount(option.Account);
+    }
 
     [RelayCommand]
     private async Task LoginAsync()
@@ -168,11 +219,10 @@ public partial class StatisticsViewModel : ViewModelBase
     [RelayCommand]
     private void Logout()
     {
-        AppRuntime.SetLocalAccount(null);
         Email = "";
         PlayerName = "";
-        ClearStats();
-        Status = "Signed out.";
+        Status = "Signed out. Accounts on this machine stay available in the switcher.";
+        AppRuntime.SetLocalAccount(null); // persists "nobody active" + raises LocalAccountChanged
     }
 
     [RelayCommand]
@@ -191,6 +241,7 @@ public partial class StatisticsViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(IsLoggedIn));
         OnPropertyChanged(nameof(AccountLabel));
+        OnPropertyChanged(nameof(CanCancelAuth));
         UpdateAccountState();
     }
 
@@ -198,11 +249,33 @@ public partial class StatisticsViewModel : ViewModelBase
 
     private void UpdateAccountState()
     {
+        // Set the mode first: RebuildAccounts assigns the selected option,
+        // and that assignment auto-switches accounts unless the auth form is
+        // showing (where the selection is a pending "continue as" choice).
         if (AppRuntime.CurrentLocalAccount is { } account)
         {
+            IsAuthMode = false;
             PlayerName = account.PlayerName;
-            _ = SyncAsync();
         }
+        else
+        {
+            IsAuthMode = true;
+            ClearStats();
+        }
+        RebuildAccounts();
+        if (AppRuntime.CurrentLocalAccount is not null)
+            _ = SyncAsync();
+    }
+
+    private void RebuildAccounts()
+    {
+        var activeId = AppRuntime.CurrentLocalAccount?.Id;
+        Accounts.Clear();
+        foreach (var account in _backend.ListAccounts())
+            Accounts.Add(new AccountOption(account));
+        OnPropertyChanged(nameof(HasStoredAccounts));
+        SelectedAccount = Accounts.FirstOrDefault(a => a.Account.Id == activeId)
+                          ?? Accounts.FirstOrDefault();
     }
 
     // ---- Stats -------------------------------------------------------------

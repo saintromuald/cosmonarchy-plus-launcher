@@ -47,6 +47,7 @@ public class CoreTests
                 Variant = Variant.Plus,
                 NetcodeRole = NetcodeRole.Solo,
                 AccountToken = "secret",
+                ActiveLocalAccountId = "acct-1",
                 PatchesInstalled = ["p1", "p2"],
             };
             s.Save(path);
@@ -57,6 +58,7 @@ public class CoreTests
             Assert.Equal(Variant.Plus, loaded.Variant);
             Assert.Equal(NetcodeRole.Solo, loaded.NetcodeRole);
             Assert.Equal("secret", loaded.AccountToken);
+            Assert.Equal("acct-1", loaded.ActiveLocalAccountId);
             Assert.Equal(["p1", "p2"], loaded.PatchesInstalled);
         }
         finally
@@ -1431,6 +1433,30 @@ public class CoreTests
             var set = LocalAccountBackend.CertifiedSet(reloaded!.Account);
             Assert.DoesNotContain("match-1", set);
             Assert.Contains("match-2", set);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task LocalAccount_lists_accounts_and_finds_by_id()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-accounts-{Guid.NewGuid():N}.json");
+        try
+        {
+            var backend = new LocalAccountBackend(path);
+            var (one, _) = await backend.RegisterAsync("b@example.com", "longenough", "Beta");
+            var (two, _) = await backend.RegisterAsync("a@example.com", "longenough", "Alpha");
+
+            var all = backend.ListAccounts();
+            Assert.Equal(2, all.Count);
+            Assert.Equal("a@example.com", all[0].Email); // sorted by email
+
+            Assert.NotNull(backend.FindAccountById(one!.Account.Id));
+            Assert.Null(backend.FindAccountById("missing"));
+            Assert.Equal("Alpha", backend.FindAccountById(two!.Account.Id)!.PlayerName);
         }
         finally
         {

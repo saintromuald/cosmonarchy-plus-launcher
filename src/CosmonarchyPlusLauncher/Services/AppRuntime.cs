@@ -57,6 +57,8 @@ public static class AppRuntime
     public static void SetLocalAccount(LocalAccount? account)
     {
         CurrentLocalAccount = account;
+        Settings.ActiveLocalAccountId = account?.Id;
+        Settings.Save();
         LocalAccountChanged?.Invoke();
     }
 
@@ -75,6 +77,31 @@ public static class AppRuntime
         // Adopt any existing checkouts (legacy Release/Prerelease, leftover
         // versions/*) the first time the new version list is seen.
         Versions.AdoptExistingInstallations();
+
+        // Restore the statistics account that was signed in last time.
+        if (AccountBackend is LocalAccountBackend localBackend)
+        {
+            var restored = !string.IsNullOrEmpty(Settings.ActiveLocalAccountId)
+                ? localBackend.FindAccountById(Settings.ActiveLocalAccountId)
+                : null;
+            if (restored is null)
+            {
+                // Pre-persistence builds never saved the active account id.
+                // When the machine holds exactly one account, that one is it.
+                var accounts = localBackend.ListAccounts();
+                if (accounts.Count == 1)
+                    restored = accounts[0];
+            }
+            if (restored is not null)
+            {
+                CurrentLocalAccount = restored;
+                if (!string.Equals(Settings.ActiveLocalAccountId, restored.Id, StringComparison.Ordinal))
+                {
+                    Settings.ActiveLocalAccountId = restored.Id;
+                    Settings.Save();
+                }
+            }
+        }
     }
 
     public static InstallService CreateInstaller(RepoEntry repo, GameVersion version) =>

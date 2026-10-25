@@ -113,6 +113,30 @@ public sealed class LocalAccountBackend : IAccountBackend
         account.Certifications.FirstOrDefault(c =>
             c.MatchUuid.Equals(matchUuid, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Every account stored on this machine, sorted by email. These
+    /// are the accounts the switcher offers (all previously authenticated —
+    /// their passwords were verified when they were added).</summary>
+    public IReadOnlyList<LocalAccount> ListAccounts()
+    {
+        lock (_gate)
+        {
+            return LoadLocked()
+                .OrderBy(a => a.Email, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+
+    /// <summary>The stored account with this id, or null. Used to restore the
+    /// last signed-in account at startup.</summary>
+    public LocalAccount? FindAccountById(string id)
+    {
+        lock (_gate)
+        {
+            return LoadLocked().FirstOrDefault(a =>
+                a.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
     // ---- internals ---------------------------------------------------------
 
     private static bool IsPlausibleEmail(string email) =>
