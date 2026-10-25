@@ -19,7 +19,11 @@ public sealed class ReplayWatchService
 
     public ReplayKrakenService Kraken => _kraken;
 
-    public async Task<ReplayBuild> WatchAsync(
+    /// <summary>The result of a watch launch: the build that played it and the
+    /// menu-friendly staged file name (sorts last in the game's replay list).</summary>
+    public sealed record WatchResult(ReplayBuild Build, string StagedFileName);
+
+    public async Task<WatchResult> WatchAsync(
         OnlineMatch match, IProgress<string>? progress = null, CancellationToken ct = default,
         bool launch = true)
     {
@@ -40,8 +44,17 @@ public sealed class ReplayWatchService
 
         progress?.Report("Downloading the replay…");
         var replay = await _kraken.DownloadReplayAsync(match, service.ReplayGameDir, progress, ct);
+
+        // Stage a menu-friendly copy that sorts LAST in the game's replay
+        // list, so WatchMenuDriver can open it with End + Enter.
+        var staged = WatchMenuDriver.WatchFileName(match.MatchUuid);
+        var stagedPath = Path.Combine(service.ReplayGameDir, staged);
+        Directory.CreateDirectory(service.ReplayGameDir);
+        if (!File.Exists(stagedPath))
+            File.Copy(replay, stagedPath, overwrite: true);
+
         await service.PlayReplayAsync(replay, progress, ct, forceCheckout: true, launch: launch);
-        return build;
+        return new WatchResult(build, staged);
     }
 
     private static bool GameIsRunning()

@@ -121,7 +121,8 @@
                              SelectedItem="{Binding SelectedOgRow}">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:ReplayRow">
-                                <Grid ColumnDefinitions="28,130,*,150,70,120" Classes.desync="{Binding Desynced}">
+                                <Grid ColumnDefinitions="28,130,*,150,70,120" Classes.desync="{Binding Desynced}"
+                                      Background="Transparent" Tag="og" DoubleTapped="OnReplayDoubleTapped">
                                     <TextBlock Grid.Column="0" Text="{Binding Badges}" />
                                     <TextBlock Grid.Column="1" Text="{Binding DateLabel}" />
                                     <TextBlock Grid.Column="2" Text="{Binding PlayersLabel}"
@@ -174,7 +175,8 @@
                              SelectedItem="{Binding SelectedPlusRow}">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:ReplayRow">
-                                <Grid ColumnDefinitions="28,130,*,150,70,120" Classes.desync="{Binding Desynced}">
+                                <Grid ColumnDefinitions="28,130,*,150,70,120" Classes.desync="{Binding Desynced}"
+                                      Background="Transparent" Tag="plus" DoubleTapped="OnReplayDoubleTapped">
                                     <TextBlock Grid.Column="0" Text="{Binding Badges}" />
                                     <TextBlock Grid.Column="1" Text="{Binding DateLabel}" />
                                     <TextBlock Grid.Column="2" Text="{Binding PlayersLabel}"
@@ -270,7 +272,8 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:FollowedReplayRow">
                                     <Grid ColumnDefinitions="28,80,130,*,150,70,120"
-                                          Classes.desync="{Binding Desynced}">
+                                          Classes.desync="{Binding Desynced}"
+                                          Background="Transparent" Tag="followed" DoubleTapped="OnReplayDoubleTapped">
                                         <TextBlock Grid.Column="0" Text="{Binding Badges}" />
                                         <TextBlock Grid.Column="1" Text="{Binding ChannelLabel}" />
                                         <TextBlock Grid.Column="2" Text="{Binding DateLabel}" />
