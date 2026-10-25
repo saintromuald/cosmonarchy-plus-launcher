@@ -1497,6 +1497,15 @@ public class CoreTests
         Assert.False(StatisticsService.IsAllComputerMatch(real));
     }
 
+    [Fact]
+    public void WatchMenuDriver_stages_a_last_sorting_file_name()
+    {
+        var name = WatchMenuDriver.WatchFileName("0cd8f48d-f7e2-54f1-b046-fbbee5a7ecd3");
+
+        Assert.Equal("zzz-watch-0cd8f48d.rep", name);
+        Assert.StartsWith(WatchMenuDriver.WatchPrefix, name);
+    }
+
     // ---- Local accounts ----------------------------------------------------
 
     [Fact]

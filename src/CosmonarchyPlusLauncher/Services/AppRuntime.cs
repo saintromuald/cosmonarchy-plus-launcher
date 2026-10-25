@@ -46,6 +46,27 @@ public static class AppRuntime
     /// specifies the server implementation that replaces this later.</summary>
     public static IAccountBackend AccountBackend { get; } = new LocalAccountBackend();
 
+    /// <summary>The main window, set by MainWindow on construction. Used to
+    /// minimize the launcher out of the way when a replay starts.</summary>
+    public static Avalonia.Controls.Window? MainWindow { get; set; }
+
+    /// <summary>Put the launcher out of the way so the fullscreen game is
+    /// immediately visible (replay watching, play launches).</summary>
+    public static void MinimizeMainWindow()
+    {
+        if (MainWindow is { } window)
+        {
+            try
+            {
+                window.WindowState = Avalonia.Controls.WindowState.Minimized;
+            }
+            catch
+            {
+                // Best effort; the fullscreen game covers the launcher anyway.
+            }
+        }
+    }
+
     /// <summary>The statistics account signed in on this machine (email +
     /// password account that claims an in-game name and certifies matches).</summary>
     public static LocalAccount? CurrentLocalAccount { get; private set; }

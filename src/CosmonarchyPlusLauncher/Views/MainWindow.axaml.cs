@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        AppRuntime.MainWindow = this;
         // Fill the screen on launch. Hyprland ignores client maximize
         // requests (Omarchy suppresses the maximize event), so it gets a
         // real fullscreen request; other desktops get maximized. The

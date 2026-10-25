@@ -492,6 +492,9 @@ public partial class ReplaysViewModel : ViewModelBase
     [RelayCommand]
     private async Task WatchFollowedAsync() => await WatchFollowedRowAsync(SelectedFollowedMatch);
 
+    /// <summary>Double-click a followed game: watch it immediately.</summary>
+    public void WatchFollowedRow(FollowedReplayRow? row) => _ = WatchFollowedRowAsync(row);
+
     [RelayCommand]
     private async Task DownloadFollowedAsync() => await DownloadFollowedRowAsync(SelectedFollowedMatch);
 
@@ -504,12 +507,14 @@ public partial class ReplaysViewModel : ViewModelBase
         {
             var progress = new Progress<string>(s => FollowedStatus = s);
             FollowedStatus = "Working out the build…";
-            var build = await Task.Run(() => _watch.WatchAsync(row.Match, progress, CancellationToken.None));
+            var result = await Task.Run(() => _watch.WatchAsync(row.Match, progress, CancellationToken.None));
             _library.MarkWatched(row.Match.MatchUuid, row.Match.FileId, row.Match.VersionLabel);
             AppRuntime.SaveLibrary();
-            FollowedStatus = $"Launched {row.Match.FileName} on {build.Label} {build.FullSha[..8]}.";
+            FollowedStatus = $"Launched {row.Match.FileName} on {result.Build.Label} {result.Build.FullSha[..8]}.";
             RebuildFollowed();
             ShowNote(row.Match);
+            AppRuntime.MinimizeMainWindow();
+            _ = DriveMenusAsync(result.StagedFileName, isPlus: false);
         }
         catch (Exception ex)
         {
@@ -906,6 +911,9 @@ public partial class ReplaysViewModel : ViewModelBase
     [RelayCommand]
     private async Task WatchPlusAsync() => await WatchAsync(SelectedPlusRow?.Match, isPlus: true);
 
+    /// <summary>Double-click an OG or Plus game: watch it immediately.</summary>
+    public void WatchRow(ReplayRow? row, bool isPlus) => _ = WatchAsync(row?.Match, isPlus);
+
     [RelayCommand]
     private async Task DownloadOgAsync() => await DownloadOnlyAsync(SelectedOgRow?.Match, isPlus: false);
 
@@ -922,12 +930,14 @@ public partial class ReplaysViewModel : ViewModelBase
         {
             var progress = new Progress<string>(s => SetStatusWithProgress(isPlus, s));
             SetStatus(isPlus, "Working out the build…");
-            var build = await Task.Run(() => _watch.WatchAsync(match, progress, CancellationToken.None));
+            var result = await Task.Run(() => _watch.WatchAsync(match, progress, CancellationToken.None));
             _library.MarkWatched(match.MatchUuid, match.FileId, match.VersionLabel);
             AppRuntime.SaveLibrary();
-            SetStatus(isPlus, $"Launched {match.FileName} on {build.Label} {build.FullSha[..8]}.");
+            SetStatus(isPlus, $"Launched {match.FileName} on {result.Build.Label} {result.Build.FullSha[..8]}.");
             ReapplyFilters();
             ShowNote(match);
+            AppRuntime.MinimizeMainWindow();
+            _ = DriveMenusAsync(result.StagedFileName, isPlus);
         }
         catch (Exception ex)
         {
@@ -937,6 +947,21 @@ public partial class ReplaysViewModel : ViewModelBase
         {
             SetBusy(isPlus, false);
             DownloadFraction = -1;
+        }
+    }
+
+    /// <summary>After the game launches, drive its menus (Single Player →
+    /// Watch Replay → last file) so the replay starts with zero clicks.</summary>
+    private async Task DriveMenusAsync(string stagedFileName, bool isPlus)
+    {
+        var progress = new Progress<string>(s => SetStatus(isPlus, s));
+        try
+        {
+            await Task.Run(() => WatchMenuDriver.DriveAsync(stagedFileName, progress, CancellationToken.None));
+        }
+        catch (Exception ex)
+        {
+            SetStatus(isPlus, $"The game launched, but the menus could not be driven: {ex.Message}");
         }
     }
 
@@ -1094,6 +1119,7 @@ public partial class ReplaysViewModel : ViewModelBase
             status += $" · “{search.Trim()}”";
         if (canShowMore)
             status += " · press “Show more” for the rest";
+        status += " · double-click a game to watch it";
         SetStatus(channel == ReplayChannel.Plus, status + ".");
     }
 
