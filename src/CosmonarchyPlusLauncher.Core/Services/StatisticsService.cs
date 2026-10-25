@@ -39,6 +39,24 @@ public static class StatisticsService
     internal static bool IsPlusChannel(OnlineMatch match) =>
         ReplayBuildResolver.IsPrerelease(match.GameVersionKind);
 
+    /// <summary>True when the named player is the only human in the match —
+    /// everyone else is a computer, so the game was practice vs AI. A human
+    /// teammate or opponent makes it a real game.</summary>
+    public static bool IsAiOnlyMatch(OnlineMatch match, string playerName)
+    {
+        var others = match.Players
+            .Where(p => !p.Name.Equals(playerName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return others.All(p => p.Type.Equals("Computer", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>True when every player in the match is a computer (a pure
+    /// AI-vs-AI sim with no humans at all). Used to filter the Replays lists,
+    /// which are not scoped to one player.</summary>
+    public static bool IsAllComputerMatch(OnlineMatch match) =>
+        match.Players.Count > 0 &&
+        match.Players.All(p => p.Type.Equals("Computer", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>Narrow a match list to one channel (Plus / original / all).</summary>
     public static IReadOnlyList<OnlineMatch> FilterChannel(
         IEnumerable<OnlineMatch> matches, ChannelFilter channel) => channel switch
@@ -57,9 +75,11 @@ public static class StatisticsService
         string playerName,
         string opponentName,
         IReadOnlySet<string> certified,
-        ChannelFilter channel = ChannelFilter.All)
+        ChannelFilter channel = ChannelFilter.All,
+        bool excludeAiGames = false)
     {
-        var entries = BuildEntries(matches, playerName, certified, CertificationFilter.All, channel);
+        var entries = BuildEntries(
+            matches, playerName, certified, CertificationFilter.All, channel, excludeAiGames);
         return entries
             .Where(e => e.Opponents.Any(o =>
                 o.Name.Equals(opponentName, StringComparison.OrdinalIgnoreCase)))
@@ -76,10 +96,12 @@ public static class StatisticsService
         string playerName,
         IReadOnlySet<string> certified,
         CertificationFilter filter = CertificationFilter.All,
-        ChannelFilter channel = ChannelFilter.All)
+        ChannelFilter channel = ChannelFilter.All,
+        bool excludeAiGames = false)
     {
-        var allEntries = BuildEntries(matches, playerName, certified, CertificationFilter.All, ChannelFilter.All);
-        var entries = BuildEntries(matches, playerName, certified, filter, channel);
+        var allEntries = BuildEntries(
+            matches, playerName, certified, CertificationFilter.All, ChannelFilter.All, excludeAiGames);
+        var entries = BuildEntries(matches, playerName, certified, filter, channel, excludeAiGames);
         return Aggregate(entries, allEntries);
     }
 
@@ -90,7 +112,8 @@ public static class StatisticsService
         string playerName,
         IReadOnlySet<string> certified,
         CertificationFilter filter = CertificationFilter.All,
-        ChannelFilter channel = ChannelFilter.All)
+        ChannelFilter channel = ChannelFilter.All,
+        bool excludeAiGames = false)
     {
         if (string.IsNullOrWhiteSpace(playerName))
             return [];
@@ -99,6 +122,8 @@ public static class StatisticsService
 
         foreach (var match in FilterChannel(matches, channel))
         {
+            if (excludeAiGames && IsAiOnlyMatch(match, wanted))
+                continue;
             var mine = match.Players
                 .Where(p => p.Name.Equals(wanted, StringComparison.OrdinalIgnoreCase))
                 .ToList();

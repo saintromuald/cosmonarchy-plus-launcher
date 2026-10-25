@@ -1427,6 +1427,76 @@ public class CoreTests
         Assert.Equal(2, StatisticsService.HeadToHead(matches, "me", "opp", certified, ChannelFilter.Original).Count);
     }
 
+    [Fact]
+    public void Statistics_ai_only_games_can_be_excluded()
+    {
+        var matches = new[]
+        {
+            // Practice: me vs a bot — AI-only.
+            new OnlineMatch("ai-1", DateTimeOffset.UtcNow, "Map", TimeSpan.FromMinutes(5),
+                "daf2a27", "Prerelease",
+                [
+                    new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                    new OnlinePlayer("bot", "Protoss", "Computer", 0, 1),
+                ],
+                "uploader", "file-ai-1", WinnerTeam: 0),
+            // Real 1v1.
+            new OnlineMatch("real-1", DateTimeOffset.UtcNow, "Map", TimeSpan.FromMinutes(5),
+                "daf2a27", "Prerelease",
+                [
+                    new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                    new OnlinePlayer("human", "Terran", "Human", 100, 1),
+                ],
+                "uploader", "file-real-1", WinnerTeam: 0),
+            // Real team game: human teammate + AI on both sides.
+            new OnlineMatch("real-2", DateTimeOffset.UtcNow, "Map", TimeSpan.FromMinutes(5),
+                "daf2a27", "Prerelease",
+                [
+                    new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                    new OnlinePlayer("buddy", "Protoss", "Human", 100, 0),
+                    new OnlinePlayer("bot-a", "Terran", "Computer", 0, 1),
+                    new OnlinePlayer("bot-b", "Terran", "Computer", 0, 1),
+                ],
+                "uploader", "file-real-2", WinnerTeam: 0),
+        };
+        var certified = new HashSet<string>();
+
+        var all = StatisticsService.Compute(matches, "me", certified);
+        var noAi = StatisticsService.Compute(matches, "me", certified, excludeAiGames: true);
+
+        Assert.Equal(3, all.TotalGames);
+        Assert.Equal(2, noAi.TotalGames);
+        Assert.DoesNotContain(noAi.RecentMatches, e => e.Match.MatchUuid == "ai-1");
+        Assert.Contains(noAi.RecentMatches, e => e.Match.MatchUuid == "real-2");
+
+        Assert.True(StatisticsService.IsAiOnlyMatch(matches[0], "me"));
+        Assert.False(StatisticsService.IsAiOnlyMatch(matches[1], "me"));
+        Assert.False(StatisticsService.IsAiOnlyMatch(matches[2], "me"));
+        Assert.False(StatisticsService.IsAllComputerMatch(matches[0])); // me is human
+    }
+
+    [Fact]
+    public void Statistics_all_computer_match_detection()
+    {
+        var sim = new OnlineMatch("sim", DateTimeOffset.UtcNow, "Map", TimeSpan.FromMinutes(5),
+            "daf2a27", "",
+            [
+                new OnlinePlayer("bot-a", "Zerg", "Computer", 0, 0),
+                new OnlinePlayer("bot-b", "Terran", "Computer", 0, 1),
+            ],
+            "uploader", "file-sim", WinnerTeam: 0);
+        var real = new OnlineMatch("real", DateTimeOffset.UtcNow, "Map", TimeSpan.FromMinutes(5),
+            "daf2a27", "",
+            [
+                new OnlinePlayer("bot-a", "Zerg", "Computer", 0, 0),
+                new OnlinePlayer("human", "Terran", "Human", 100, 1),
+            ],
+            "uploader", "file-real", WinnerTeam: 0);
+
+        Assert.True(StatisticsService.IsAllComputerMatch(sim));
+        Assert.False(StatisticsService.IsAllComputerMatch(real));
+    }
+
     // ---- Local accounts ----------------------------------------------------
 
     [Fact]

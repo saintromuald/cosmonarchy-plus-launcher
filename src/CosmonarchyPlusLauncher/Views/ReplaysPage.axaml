@@ -59,6 +59,7 @@
                     <CheckBox Content="Favourites only" IsChecked="{Binding FavoritesOnly}" />
                     <CheckBox Content="Watched only" IsChecked="{Binding WatchedOnly}" />
                     <CheckBox Content="With notes only" IsChecked="{Binding WithNotesOnly}" />
+                    <CheckBox Content="Hide AI-only games" IsChecked="{Binding HideAiGames}" />
                     <TextBlock Text="Certification:" VerticalAlignment="Center" />
                     <ComboBox ItemsSource="{Binding CertificationFilters}" SelectedItem="{Binding CertFilter}"
                               Width="120" />

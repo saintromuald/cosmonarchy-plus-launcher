@@ -86,6 +86,8 @@
                           ItemsSource="{Binding Filters}" SelectedItem="{Binding SelectedFilter}" />
                 <TextBox Grid.Column="3" Margin="8,0,0,0" Width="190" Text="{Binding Search}"
                          PlaceholderText="Search matches…" />
+                <CheckBox Grid.Column="4" Content="Hide games vs AI" IsChecked="{Binding HideAiGames}"
+                          Margin="8,0,0,0" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="5" Text="{Binding SyncLabel}" VerticalAlignment="Center"
                            Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                            TextTrimming="CharacterEllipsis" MaxWidth="260" />

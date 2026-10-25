@@ -154,6 +154,10 @@ public partial class ReplaysViewModel : ViewModelBase
     [ObservableProperty] private bool _watchedOnly;
     [ObservableProperty] private bool _withNotesOnly;
 
+    /// <summary>True hides pure AI-vs-AI sims (no human players at all) from
+    /// the online lists. Off by default so every game remains findable.</summary>
+    [ObservableProperty] private bool _hideAiGames;
+
     /// <summary>Certification filter for the online lists. Ties into the
     /// statistics account: Certified = games the signed-in account checked as
     /// really theirs, Uncertified = the rest (the impostor check).</summary>
@@ -300,6 +304,7 @@ public partial class ReplaysViewModel : ViewModelBase
     partial void OnOgPlayerChanged(string value) => ReapplyFilters();
     partial void OnPlusPlayerChanged(string value) => ReapplyFilters();
     partial void OnCertFilterChanged(CertificationFilter value) => ReapplyFilters();
+    partial void OnHideAiGamesChanged(bool value) => ReapplyFilters();
 
     partial void OnTeam1v1Changed(bool value) => ReapplyFilters();
     partial void OnTeam2v2Changed(bool value) => ReapplyFilters();
@@ -853,6 +858,7 @@ public partial class ReplaysViewModel : ViewModelBase
         FavoritesOnly = WatchedOnly = WithNotesOnly = false;
         IgnoreObservers = true;
         CertFilter = CertificationFilter.All;
+        HideAiGames = false;
         OgSearch = PlusSearch = "";
         ReapplyFilters();
         ListStatus = "Filters cleared.";
@@ -1040,6 +1046,8 @@ public partial class ReplaysViewModel : ViewModelBase
             matches = matches.Where(m => MatchContains(m, search.Trim()));
         if (CertFilter != CertificationFilter.All)
             matches = matches.Where(m => (CertFilter == CertificationFilter.Certified) == IsCertified(m.MatchUuid));
+        if (HideAiGames)
+            matches = matches.Where(m => !StatisticsService.IsAllComputerMatch(m));
 
         var filtered = !BuildFilters().IsDefault || player != AllPlayers ||
                        !string.IsNullOrWhiteSpace(search);
