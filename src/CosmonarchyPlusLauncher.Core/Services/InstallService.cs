@@ -317,7 +317,11 @@ public sealed class InstallService
             startInfo.ArgumentList.Add(ToWindowsPath(replayPath));
         startInfo.Environment["WINEPREFIX"] = Path.Combine(_settings.LinuxPrefixRoot, "prefix");
         startInfo.Environment["PROTONPATH"] = "GE-Proton";
-        startInfo.Environment["GAMEID"] = $"umu-cosmonarchy-{_version.Id}";
+        // The channel name (Release/Prerelease/Original) mirrors cosmo-variant
+        // and cosmo-watch. A GAMEID that does not match the channel's casing
+        // makes umu/proton treat the game as a different title, which ended
+        // the session cleanly after ~30 seconds.
+        startInfo.Environment["GAMEID"] = $"umu-cosmonarchy-{ChannelName(_version.Dir)}";
         startInfo.Environment["PROTON_VERB"] = "waitforexitandrun";
 
         // Docked play: a scale-2 handheld panel + scale-1 external monitor mix
@@ -428,6 +432,18 @@ public sealed class InstallService
         if (Path.IsPathRooted(relative) || relative.StartsWith("..", StringComparison.Ordinal))
             return path;
         return "C:\\" + relative.Replace('/', '\\');
+    }
+
+    /// <summary>The build channel a checkout belongs to: the first path
+    /// segment of its directory ("Release", "Prerelease", "Original",
+    /// "versions", …). Used for the umu GAMEID so every launch of the same
+    /// channel shares one proton identity.</summary>
+    internal static string ChannelName(string dir)
+    {
+        var trimmed = dir.Trim('/');
+        var slash = trimmed.IndexOfAny(['/', '\\']);
+        var first = slash < 0 ? trimmed : trimmed[..slash];
+        return string.IsNullOrEmpty(first) ? "Release" : first;
     }
 
     private static async Task WaitForStarcraftWindowAsync(CancellationToken ct)
