@@ -43,6 +43,11 @@ public sealed class AppSettings
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? AccountToken { get; set; }
 
+    /// <summary>Id of the statistics account signed in on this machine.
+    /// Restored on startup so sign-in persists; null = nobody signed in.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ActiveLocalAccountId { get; set; }
+
     /// <summary>Patch ids already installed, so they are not re-applied.</summary>
     public List<string> PatchesInstalled { get; set; } = [];
 

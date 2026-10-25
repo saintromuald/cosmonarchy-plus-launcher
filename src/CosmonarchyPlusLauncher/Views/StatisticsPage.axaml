@@ -11,9 +11,24 @@
 
         <TextBlock Grid.Row="0" Text="Statistics" FontSize="20" FontWeight="SemiBold" />
 
-        <!-- Logged out: email + password login / create account -->
-        <StackPanel Grid.Row="1" Margin="0,12,0,0" Spacing="8" IsVisible="{Binding !IsLoggedIn}"
+        <!-- Auth form: continue as a stored account, or add one -->
+        <StackPanel Grid.Row="1" Margin="0,12,0,0" Spacing="8" IsVisible="{Binding IsAuthMode}"
                     MaxWidth="420" HorizontalAlignment="Left" VerticalAlignment="Top">
+            <StackPanel Spacing="6" IsVisible="{Binding HasStoredAccounts}">
+                <TextBlock Text="Accounts on this machine:" FontWeight="SemiBold" />
+                <ComboBox ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
+                          HorizontalAlignment="Stretch">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:AccountOption">
+                            <TextBlock Text="{Binding Label}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Content="Continue as selected" Command="{Binding ContinueAsCommand}"
+                        HorizontalAlignment="Left" MinWidth="150" />
+                <TextBlock Text="— or add an account —" TextAlignment="Center"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+            </StackPanel>
             <TextBlock Text="Statistics are tied to an account. Create one with your email and the in-game name you play under, then every ReplayKraken match with that name feeds your numbers."
                        TextWrapping="Wrap" />
             <TextBox Text="{Binding Email}" PlaceholderText="Email" />
@@ -24,6 +39,8 @@
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
                 <Button Content="Log in" Command="{Binding LoginCommand}" IsEnabled="{Binding !Busy}" MinWidth="120" />
                 <Button Content="Create account" Command="{Binding RegisterCommand}" IsEnabled="{Binding !Busy}" MinWidth="120" />
+                <Button Content="Cancel" Command="{Binding CancelAuthCommand}"
+                        IsVisible="{Binding CanCancelAuth}" MinWidth="80" />
             </StackPanel>
             <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                        TextWrapping="Wrap" />
@@ -31,13 +48,22 @@
 
         <!-- Logged in: profile + opponents + certification -->
         <Grid Grid.Row="1" Margin="0,8,0,0" RowDefinitions="Auto,Auto,Auto,*"
-              IsVisible="{Binding IsLoggedIn}">
+              IsVisible="{Binding !IsAuthMode}">
 
-            <!-- Account row -->
-            <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto">
+            <!-- Account row: switch, add, or sign out -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,180,Auto,Auto,*,Auto">
                 <TextBlock Grid.Column="0" Text="{Binding AccountLabel}" VerticalAlignment="Center" />
-                <Button Grid.Column="1" Content="Log out" Command="{Binding LogoutCommand}" Margin="16,0,0,0" />
-                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
+                <ComboBox Grid.Column="1" Margin="12,0,0,0" ItemsSource="{Binding Accounts}"
+                          SelectedItem="{Binding SelectedAccount}" HorizontalAlignment="Stretch">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:AccountOption">
+                            <TextBlock Text="{Binding Label}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Grid.Column="2" Content="Add account…" Command="{Binding AddAccountCommand}" Margin="8,0,0,0" />
+                <Button Grid.Column="3" Content="Log out" Command="{Binding LogoutCommand}" Margin="8,0,0,0" />
+                <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6">
                     <TextBox Text="{Binding PlayerName}" PlaceholderText="In-game name" Width="160" />
                     <Button Content="Update name" Command="{Binding UpdatePlayerNameCommand}" />
                 </StackPanel>
