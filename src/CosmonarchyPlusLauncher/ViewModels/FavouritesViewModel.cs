@@ -221,7 +221,25 @@ public partial class FavouritesViewModel : ViewModelBase
         try
         {
             var progress = new Progress<string>(s => FavoritesStatus = s);
-            var all = await _kraken.GetMatchesAsync(force, progress, CancellationToken.None);
+            var all = new List<OnlineMatch>(
+                await _kraken.GetMatchesAsync(force, progress, CancellationToken.None));
+
+            var plusServer = _settings.PlusReplayServer.Trim();
+            if (plusServer.Length > 0)
+            {
+                try
+                {
+                    var plusKraken = new ReplayKrakenService(apiBase: plusServer);
+                    all.AddRange(await plusKraken.GetPlusMatchesAsync(
+                        force, progress, CancellationToken.None));
+                }
+                catch (Exception ex)
+                {
+                    FavoritesStatus = $"Could not load the Plus server list ({ex.Message}); " +
+                                      "using the official list.";
+                }
+            }
+
             _online = all.GroupBy(m => m.MatchUuid, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
             EnrichSnapshots();

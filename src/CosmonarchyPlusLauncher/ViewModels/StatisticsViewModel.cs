@@ -424,8 +424,8 @@ public partial class StatisticsViewModel : ViewModelBase
         try
         {
             var progress = new Progress<string>(s => SyncLabel = s);
-            _matches = await _kraken.GetMatchesAsync(force: false, progress, CancellationToken.None);
-            SyncLabel = $"{_matches.Count} matches on ReplayKraken — last synced {DateTime.Now:HH:mm}.";
+            _matches = await FetchMatchesAsync(force: false, progress);
+            SyncLabel = $"{_matches.Count} matches — last synced {DateTime.Now:HH:mm}.";
             Rebuild();
         }
         catch (Exception ex)
@@ -448,8 +448,8 @@ public partial class StatisticsViewModel : ViewModelBase
         try
         {
             var progress = new Progress<string>(s => SyncLabel = s);
-            _matches = await _kraken.GetMatchesAsync(force: true, progress, CancellationToken.None);
-            SyncLabel = $"{_matches.Count} matches on ReplayKraken — refreshed {DateTime.Now:HH:mm}.";
+            _matches = await FetchMatchesAsync(force: true, progress);
+            SyncLabel = $"{_matches.Count} matches — refreshed {DateTime.Now:HH:mm}.";
             Rebuild();
         }
         catch (Exception ex)
@@ -460,6 +460,33 @@ public partial class StatisticsViewModel : ViewModelBase
         {
             SyncBusy = false;
         }
+    }
+
+    /// <summary>The official match list plus the self-hosted Plus server's,
+    /// deduplicated by match uuid (the server copy wins for pre-split games
+    /// that still sit on both).</summary>
+    private async Task<IReadOnlyList<OnlineMatch>> FetchMatchesAsync(bool force, IProgress<string> progress)
+    {
+        var byUuid = new Dictionary<string, OnlineMatch>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in await _kraken.GetMatchesAsync(force, progress, CancellationToken.None))
+            byUuid[m.MatchUuid] = m;
+
+        var plusServer = AppRuntime.Settings.PlusReplayServer.Trim();
+        if (plusServer.Length > 0)
+        {
+            try
+            {
+                var plusKraken = new ReplayKrakenService(apiBase: plusServer);
+                foreach (var m in await plusKraken.GetPlusMatchesAsync(force, progress, CancellationToken.None))
+                    byUuid[m.MatchUuid] = m;
+            }
+            catch (Exception ex)
+            {
+                progress.Report($"Could not load the Plus server list ({ex.Message}); using the official list.");
+            }
+        }
+
+        return byUuid.Values.OrderByDescending(m => m.UploadedAt).ToList();
     }
 
     /// <summary>Certify or un-certify one match as genuinely the account's.</summary>

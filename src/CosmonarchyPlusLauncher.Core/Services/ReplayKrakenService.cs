@@ -14,19 +14,31 @@ namespace CosmonarchyPlusLauncher.Core.Services;
 /// demand / after <see cref="CacheTtl"/>.</summary>
 public sealed class ReplayKrakenService
 {
-    public const string ApiBase = "https://cosmonarchy.com/api";
+    public const string DefaultApiBase = "https://cosmonarchy.com/api";
     public static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
 
     private readonly HttpClient _http;
     private readonly string _cacheFile;
+    private readonly string _apiBase;
 
-    public ReplayKrakenService(HttpClient? http = null, string? cacheFile = null)
+    public ReplayKrakenService(HttpClient? http = null, string? cacheFile = null, string? apiBase = null)
     {
         _http = http ?? CreateHttpClient();
+        _apiBase = string.IsNullOrWhiteSpace(apiBase) ? DefaultApiBase : apiBase.TrimEnd('/');
         _cacheFile = cacheFile ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "cosmonarchy-plus-launcher", "matches-cache-v3.json");
     }
+
+    /// <summary>The API base a match came from: its own server when it was
+    /// listed by the self-hosted Plus server, otherwise this service's.</summary>
+    public static string ApiFor(OnlineMatch match) =>
+        string.IsNullOrWhiteSpace(match.ApiBase) ? DefaultApiBase : match.ApiBase;
+
+    /// <summary>True when the match was listed by the self-hosted Plus
+    /// server (its downloads use a different URL shape).</summary>
+    public static bool IsPlusServerMatch(OnlineMatch match) =>
+        !string.IsNullOrWhiteSpace(match.ApiBase);
 
     private static HttpClient CreateHttpClient()
     {
@@ -56,12 +68,38 @@ public sealed class ReplayKrakenService
             }
         }
 
-        progress?.Report("Downloading the match list from cosmonarchy.com…");
+        progress?.Report("Downloading the match list…");
         var bytes = await HttpDownload.ToBytesAsync(
-            _http, $"{ApiBase}/matches", progress, "Downloading match list", ct);
+            _http, $"{_apiBase}/matches", progress, "Downloading match list", ct);
         var matches = await ParseMatchesAsync(new MemoryStream(bytes), ct);
         progress?.Report($"{matches.Count} matches on the server.");
         WriteCache(matches);
+        return matches;
+    }
+
+    /// <summary>The self-hosted Plus server's match list. Its schema differs
+    /// from the official one (a paged { matches, total } document of
+    /// summaries), and every match in it is Plus-channel by definition.</summary>
+    public async Task<IReadOnlyList<OnlineMatch>> GetPlusMatchesAsync(
+        bool force = false, IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        var cacheFile = _cacheFile + ".plus";
+        if (!force)
+        {
+            var cached = ReadCache(cacheFile);
+            if (cached is not null && DateTimeOffset.UtcNow - cached.FetchedAt < CacheTtl)
+            {
+                progress?.Report($"Using the Plus match list cached {cached.FetchedAt.LocalDateTime:HH:mm}.");
+                return cached.Matches;
+            }
+        }
+
+        progress?.Report("Downloading the Plus match list…");
+        var bytes = await HttpDownload.ToBytesAsync(
+            _http, $"{_apiBase}/matches?limit=200", progress, "Downloading Plus match list", ct);
+        var matches = await ParsePlusMatchesAsync(new MemoryStream(bytes), _apiBase, ct);
+        progress?.Report($"{matches.Count} Plus matches on the server.");
+        WriteCache(matches, cacheFile);
         return matches;
     }
 
@@ -94,7 +132,11 @@ public sealed class ReplayKrakenService
             return path;
         }
 
-        var url = $"{ApiBase}/matches/{match.MatchUuid}/download/{match.FileId}";
+        // The self-hosted fork serves replays at /api/matches/{uuid}/replay;
+        // the official server keys them by file id.
+        var url = IsPlusServerMatch(match)
+            ? $"{match.ApiBase}/api/matches/{match.MatchUuid}/replay"
+            : $"{ApiFor(match)}/matches/{match.MatchUuid}/download/{match.FileId}";
         await HttpDownload.ToFileAsync(_http, url, path, progress, $"Downloading {match.FileName}", ct);
         return path;
     }
@@ -115,6 +157,83 @@ public sealed class ReplayKrakenService
                 matches.Add(match);
         }
         return matches;
+    }
+
+    /// <summary>Parse the self-hosted fork's paged match list
+    /// (<c>{ "matches": [ … ], "total": n }</c>). Every match is Plus-channel;
+    /// the caller tags them with their server base for downloads.</summary>
+    internal static async Task<IReadOnlyList<OnlineMatch>> ParsePlusMatchesAsync(
+        Stream json, string apiBase, CancellationToken ct = default)
+    {
+        using var doc = await JsonDocument.ParseAsync(json, cancellationToken: ct);
+        if (doc.RootElement.ValueKind != JsonValueKind.Object ||
+            !doc.RootElement.TryGetProperty("matches", out var list) ||
+            list.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("The Plus match API did not return a matches array.");
+
+        var matches = new List<OnlineMatch>(list.GetArrayLength());
+        foreach (var item in list.EnumerateArray())
+        {
+            var match = MapPlus(item, apiBase);
+            if (match is not null)
+                matches.Add(match);
+        }
+        return matches;
+    }
+
+    /// <summary>One summary row of the self-hosted fork's list API. The fork
+    /// stores what the client sent: map, kind, frames, matchup, and players
+    /// with race/type/result — no desync flag, no per-file ids.</summary>
+    private static OnlineMatch? MapPlus(JsonElement item, string apiBase)
+    {
+        var uuid = GetString(item, "uuid");
+        if (string.IsNullOrEmpty(uuid))
+            return null;
+
+        var uploadedAt = DateTimeOffset.TryParse(
+            GetString(item, "uploadedAt"), CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind, out var at)
+            ? at
+            : DateTimeOffset.MinValue;
+
+        var players = new List<OnlinePlayer>();
+        if (item.TryGetProperty("players", out var list) && list.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var p in list.EnumerateArray())
+            {
+                if (p.ValueKind != JsonValueKind.Object)
+                    continue;
+                var name = GetString(p, "name");
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                var type = GetString(p, "type");
+                players.Add(new OnlinePlayer(
+                    name,
+                    GetString(p, "race"),
+                    type.Equals("computer", StringComparison.OrdinalIgnoreCase) ? "Computer"
+                        : type.Equals("human", StringComparison.OrdinalIgnoreCase) ? "Human" : "",
+                    null,
+                    checked((int)GetLong(p, "slot"))));
+            }
+        }
+
+        // StarCraft runs on 42 ms turns; the fork stores frames, the launcher
+        // displays durations, so convert here.
+        var frames = GetLong(item, "durationFrames");
+        return new OnlineMatch(
+            uuid,
+            uploadedAt,
+            GetString(item, "map"),
+            frames > 0 ? TimeSpan.FromMilliseconds(frames * 42.0) : TimeSpan.Zero,
+            GetString(item, "gameVersion"),
+            "",
+            players,
+            GetString(item, "uploadedBy"),
+            "")
+        {
+            Channel = ReplayChannel.Plus,
+            ApiBase = apiBase,
+        };
     }
 
     private static OnlineMatch? Map(JsonElement item)
@@ -229,15 +348,21 @@ public sealed class ReplayKrakenService
             ? value.GetString() ?? ""
             : "";
 
+    private static long GetLong(JsonElement element, string name) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) &&
+        value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number)
+            ? number
+            : 0;
+
     private sealed record Cache(DateTimeOffset FetchedAt, IReadOnlyList<OnlineMatch> Matches);
 
-    private Cache? ReadCache()
+    private Cache? ReadCache(string? cacheFile = null)
     {
         try
         {
-            if (!File.Exists(_cacheFile))
+            if (!File.Exists(cacheFile ?? _cacheFile))
                 return null;
-            var cache = JsonSerializer.Deserialize<Cache>(File.ReadAllText(_cacheFile));
+            var cache = JsonSerializer.Deserialize<Cache>(File.ReadAllText(cacheFile ?? _cacheFile));
             return cache?.Matches.Count > 0 ? cache : null;
         }
         catch (Exception ex) when (ex is JsonException or IOException)
@@ -246,13 +371,14 @@ public sealed class ReplayKrakenService
         }
     }
 
-    private void WriteCache(IReadOnlyList<OnlineMatch> matches)
+    private void WriteCache(IReadOnlyList<OnlineMatch> matches, string? cacheFile = null)
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_cacheFile)!);
+            var path = cacheFile ?? _cacheFile;
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var cache = new Cache(DateTimeOffset.UtcNow, matches);
-            File.WriteAllText(_cacheFile, JsonSerializer.Serialize(cache));
+            File.WriteAllText(path, JsonSerializer.Serialize(cache));
         }
         catch (IOException)
         {

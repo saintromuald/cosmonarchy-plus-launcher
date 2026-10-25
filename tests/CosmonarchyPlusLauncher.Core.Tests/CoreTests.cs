@@ -272,6 +272,47 @@ public class CoreTests
     }
 
     [Fact]
+    public async Task ReplayKraken_maps_the_plus_server_payload()
+    {
+        const string json = """
+        {
+          "matches": [
+            {
+              "uuid": "123e4567-e89b-12d3-a456-426614174000",
+              "gameVersion": "c6520e1",
+              "map": "Lucidity",
+              "gameType": "Ranked",
+              "durationFrames": 15881,
+              "matchup": "ZvZ",
+              "uploadedBy": "Esoteric",
+              "uploadedAt": "2026-10-25T08:05:18+00:00",
+              "players": [
+                { "name": "Esoteric", "race": "Zerg", "slot": 0, "result": "won", "type": "human" },
+                { "name": "Groovy", "race": "Zerg", "slot": 1, "result": "lost", "type": "human" },
+                { "name": "Computer1", "race": "Terran", "slot": 2, "result": "unknown", "type": "computer" }
+              ]
+            }
+          ],
+          "total": 1
+        }
+        """;
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+        var matches = await ReplayKrakenService.ParsePlusMatchesAsync(stream, "https://plus.example.org/api");
+
+        var match = Assert.Single(matches);
+        Assert.Equal("Lucidity", match.MapName);
+        Assert.Equal("c6520e1", match.GameVersion);
+        Assert.Equal("Esoteric", match.UploaderName);
+        Assert.Equal(ReplayChannel.Plus, match.Channel);
+        Assert.Equal("https://plus.example.org/api", match.ApiBase);
+        Assert.Equal(DateTimeOffset.Parse("2026-10-25T08:05:18+00:00"), match.UploadedAt);
+        // 42 ms turns: 15881 frames ≈ 11:07.
+        Assert.Equal(TimeSpan.FromMilliseconds(15881 * 42.0), match.Duration);
+        Assert.Equal("Computer", match.Players.Single(p => p.Name == "Computer1").Type);
+        Assert.Equal("Human", match.Players.Single(p => p.Name == "Esoteric").Type);
+    }
+
+    [Fact]
     public void ReplayKraken_objectid_timestamp_is_hex_seconds()
     {
         Assert.Equal(
