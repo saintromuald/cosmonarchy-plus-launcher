@@ -11,8 +11,10 @@ using CosmonarchyPlusLauncher.Services;
 namespace CosmonarchyPlusLauncher.ViewModels;
 
 /// <summary>One online game plus this machine's library state (favourite,
-/// watched, note) for the list badges.</summary>
-public sealed record ReplayRow(OnlineMatch Match, bool Favorite, bool Watched, bool HasNote, bool Desynced)
+/// watched, note) for the list badges, and the statistics-account
+/// certification ("✓" when the signed-in account certified it as theirs).</summary>
+public sealed record ReplayRow(
+    OnlineMatch Match, bool Favorite, bool Watched, bool HasNote, bool Desynced, bool Certified)
 {
     public string PlayersLabel => Match.PlayersLabel;
     public string DateLabel => Match.DateLabel;
@@ -24,6 +26,7 @@ public sealed record ReplayRow(OnlineMatch Match, bool Favorite, bool Watched, b
         Favorite ? "★ " : "",
         Watched ? "▶ " : "",
         HasNote ? "✎ " : "",
+        Certified ? "✓ " : "",
         Desynced ? "⚠ " : "");
 }
 
@@ -68,7 +71,7 @@ public sealed record FollowedRow(string Name, int OgCount, int PlusCount)
 
 /// <summary>One replay of a followed player, with the channel it belongs to.</summary>
 public sealed record FollowedReplayRow(
-    OnlineMatch Match, ReplayChannel Channel, bool Favorite, bool Watched, bool HasNote, bool Desynced)
+    OnlineMatch Match, ReplayChannel Channel, bool Favorite, bool Watched, bool HasNote, bool Desynced, bool Certified)
 {
     public string PlayersLabel => Match.PlayersLabel;
     public string DateLabel => Match.DateLabel;
@@ -82,6 +85,7 @@ public sealed record FollowedReplayRow(
         Favorite ? "★ " : "",
         Watched ? "▶ " : "",
         HasNote ? "✎ " : "",
+        Certified ? "✓ " : "",
         Desynced ? "⚠ " : "");
 }
 
@@ -107,6 +111,8 @@ public partial class ReplaysViewModel : ViewModelBase
         _watch = new ReplayWatchService(_settings, _kraken);
         _resolver = new ReplayBuildResolver(_settings);
         AppRuntime.LibraryChanged += OnLibraryChanged;
+        AppRuntime.CertificationsChanged += OnCertificationsChanged;
+        AppRuntime.LocalAccountChanged += OnCertificationsChanged;
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var candidates = new[]
@@ -147,6 +153,14 @@ public partial class ReplaysViewModel : ViewModelBase
     [ObservableProperty] private bool _favoritesOnly;
     [ObservableProperty] private bool _watchedOnly;
     [ObservableProperty] private bool _withNotesOnly;
+
+    /// <summary>Certification filter for the online lists. Ties into the
+    /// statistics account: Certified = games the signed-in account checked as
+    /// really theirs, Uncertified = the rest (the impostor check).</summary>
+    public static IReadOnlyList<CertificationFilter> CertificationFilters { get; } =
+        [CertificationFilter.All, CertificationFilter.Certified, CertificationFilter.Uncertified];
+
+    [ObservableProperty] private CertificationFilter _certFilter = CertificationFilter.All;
 
     // ---- Saved lists ------------------------------------------------------
 
@@ -285,6 +299,7 @@ public partial class ReplaysViewModel : ViewModelBase
     partial void OnPlusSearchChanged(string value) => ReapplyFilters();
     partial void OnOgPlayerChanged(string value) => ReapplyFilters();
     partial void OnPlusPlayerChanged(string value) => ReapplyFilters();
+    partial void OnCertFilterChanged(CertificationFilter value) => ReapplyFilters();
 
     partial void OnTeam1v1Changed(bool value) => ReapplyFilters();
     partial void OnTeam2v2Changed(bool value) => ReapplyFilters();
@@ -328,8 +343,12 @@ public partial class ReplaysViewModel : ViewModelBase
         PlusHint = value is null ? "" : Hint(value.Match, ReplayChannel.Plus);
     }
 
-    partial void OnNoteMatchChanged(OnlineMatch? value) =>
+    partial void OnNoteMatchChanged(OnlineMatch? value)
+    {
         OnPropertyChanged(nameof(HasNoteContext));
+        OnPropertyChanged(nameof(CanCertify));
+        OnPropertyChanged(nameof(CertifyContent));
+    }
 
     // ---- Follow players ---------------------------------------------------
 
@@ -441,9 +460,9 @@ public partial class ReplaysViewModel : ViewModelBase
         }
 
         var rows = _ogAll.Where(m => MatchHasPlayer(m, followed.Name))
-            .Select(m => new FollowedReplayRow(m, ReplayChannel.Original, false, false, false, m.HasDesync))
+            .Select(m => new FollowedReplayRow(m, ReplayChannel.Original, false, false, false, m.HasDesync, false))
             .Concat(_plusAll.Where(m => MatchHasPlayer(m, followed.Name))
-                .Select(m => new FollowedReplayRow(m, ReplayChannel.Plus, false, false, false, m.HasDesync)))
+                .Select(m => new FollowedReplayRow(m, ReplayChannel.Plus, false, false, false, m.HasDesync, false)))
             .OrderByDescending(r => r.Match.UploadedAt)
             .ToList();
 
@@ -456,6 +475,7 @@ public partial class ReplaysViewModel : ViewModelBase
                 Favorite = _library.IsFavorite(match.MatchUuid),
                 Watched = _library.WasWatched(match.MatchUuid),
                 HasNote = note is { Text.Length: > 0 } || (note?.Tags.Count ?? 0) > 0,
+                Certified = IsCertified(match.MatchUuid),
             });
         }
         SelectedFollowedMatch = FollowedMatches.FirstOrDefault(r =>
@@ -538,6 +558,53 @@ public partial class ReplaysViewModel : ViewModelBase
             ShowNote(NoteMatch);
     }
 
+    /// <summary>The statistics account changed or certified/un-certified a
+    /// match: refresh the ✓ badges, the certification filter and the note
+    /// panel's certify button.</summary>
+    private void OnCertificationsChanged()
+    {
+        OnPropertyChanged(nameof(CanCertify));
+        OnPropertyChanged(nameof(CertifyContent));
+        ReapplyFilters();
+        if (NoteMatch is not null)
+            ShowNote(NoteMatch);
+    }
+
+    /// <summary>True when the signed-in statistics account's claimed name
+    /// appears in the selected match and the account exists — i.e. the match
+    /// can be certified as theirs.</summary>
+    public bool CanCertify =>
+        AppRuntime.CurrentLocalAccount is { } account &&
+        NoteMatch is { } match &&
+        (match.UploaderName.Equals(account.PlayerName, StringComparison.OrdinalIgnoreCase) ||
+         match.Players.Any(p => p.Name.Equals(account.PlayerName, StringComparison.OrdinalIgnoreCase)));
+
+    public string CertifyContent => NoteMatch is not null && IsCertified(NoteMatch.MatchUuid)
+        ? "Uncertify"
+        : "Certify as me";
+
+    /// <summary>Certify (or un-certify) the selected match as genuinely played
+    /// by the signed-in statistics account.</summary>
+    [RelayCommand]
+    private async Task ToggleCertifyAsync()
+    {
+        var account = AppRuntime.CurrentLocalAccount;
+        if (account is null || NoteMatch is null)
+            return;
+        var certified = !IsCertified(NoteMatch.MatchUuid);
+        await AppRuntime.AccountBackend.SetCertificationAsync(
+            new AccountSession(account, ""), NoteMatch.MatchUuid, certified);
+        AppRuntime.NotifyCertificationsChanged();
+        NoteStatus = certified
+            ? $"Certified as yours. Your statistics count it and the ✓ badge is set."
+            : "Uncertified. It no longer feeds your statistics and stays searchable as uncertified.";
+    }
+
+    /// <summary>Is this match certified by the signed-in statistics account?</summary>
+    private static bool IsCertified(string matchUuid) =>
+        AppRuntime.CurrentLocalAccount is { } account &&
+        LocalAccountBackend.CertifiedSet(account).Contains(matchUuid);
+
     private void ShowNote(OnlineMatch match)
     {
         NoteMatch = match;
@@ -562,6 +629,11 @@ public partial class ReplaysViewModel : ViewModelBase
         };
         if (match.HasDesync)
             bits.Add("⚠ This game desynced.");
+        bits.Add(IsCertified(match.MatchUuid)
+            ? "✓ Certified as yours by the statistics account."
+            : AppRuntime.CurrentLocalAccount is null
+                ? "Create a Statistics account to certify games as really yours."
+                : "Not certified as yours yet.");
         NoteMeta = string.Join(" · ", bits);
         NoteStatus = "";
     }
@@ -777,6 +849,7 @@ public partial class ReplaysViewModel : ViewModelBase
         Team1v1 = Team2v2 = Team3v3 = Team4v4 = TeamOther = false;
         FavoritesOnly = WatchedOnly = WithNotesOnly = false;
         IgnoreObservers = true;
+        CertFilter = CertificationFilter.All;
         OgSearch = PlusSearch = "";
         ReapplyFilters();
         ListStatus = "Filters cleared.";
@@ -962,6 +1035,8 @@ public partial class ReplaysViewModel : ViewModelBase
             matches = matches.Where(m => MatchHasPlayer(m, player));
         if (!string.IsNullOrWhiteSpace(search))
             matches = matches.Where(m => MatchContains(m, search.Trim()));
+        if (CertFilter != CertificationFilter.All)
+            matches = matches.Where(m => (CertFilter == CertificationFilter.Certified) == IsCertified(m.MatchUuid));
 
         var filtered = !BuildFilters().IsDefault || player != AllPlayers ||
                        !string.IsNullOrWhiteSpace(search);
@@ -988,7 +1063,8 @@ public partial class ReplaysViewModel : ViewModelBase
                 _library.IsFavorite(match.MatchUuid),
                 _library.WasWatched(match.MatchUuid),
                 note is { Text.Length: > 0 } || (note?.Tags.Count ?? 0) > 0,
-                match.HasDesync));
+                match.HasDesync,
+                IsCertified(match.MatchUuid)));
         }
 
         var restored = previous is null
@@ -1017,6 +1093,10 @@ public partial class ReplaysViewModel : ViewModelBase
     private static bool MatchContains(OnlineMatch match, string text)
     {
         var comparison = StringComparison.OrdinalIgnoreCase;
+        if (text.Equals("certified", comparison))
+            return IsCertified(match.MatchUuid);
+        if (text.Equals("uncertified", comparison))
+            return !IsCertified(match.MatchUuid);
         return match.PlayersLabel.Contains(text, comparison) ||
                match.UploaderName.Contains(text, comparison) ||
                match.MapName.Contains(text, comparison) ||

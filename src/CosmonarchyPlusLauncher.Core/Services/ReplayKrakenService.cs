@@ -142,6 +142,12 @@ public sealed class ReplayKrakenService
         if (string.IsNullOrEmpty(uploader) && info.ValueKind == JsonValueKind.Object)
             uploader = GetString(info, "uploaderName");
 
+        int? winnerTeam = info.ValueKind == JsonValueKind.Object &&
+                          info.TryGetProperty("winnerTeam", out var winner) &&
+                          winner.TryGetInt32(out var winningTeam)
+            ? winningTeam
+            : null;
+
         var players = new List<OnlinePlayer>();
         if (info.ValueKind == JsonValueKind.Object &&
             info.TryGetProperty("teams", out var teams) && teams.ValueKind == JsonValueKind.Array)
@@ -184,7 +190,8 @@ public sealed class ReplayKrakenService
             players,
             uploader,
             GetString(replay, "fileId"),
-            HasDesyncFile(main) || HasDesyncFiles(item));
+            HasDesyncFile(main) || HasDesyncFiles(item),
+            winnerTeam);
     }
 
     /// <summary>True when the replay element carries the desync flag.</summary>

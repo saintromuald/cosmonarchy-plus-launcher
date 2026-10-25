@@ -1,0 +1,147 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CosmonarchyPlusLauncher.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="560"
+             x:Class="CosmonarchyPlusLauncher.Views.StatisticsPage"
+             x:DataType="vm:StatisticsViewModel">
+
+    <Grid Margin="16" RowDefinitions="Auto,*">
+
+        <TextBlock Grid.Row="0" Text="Statistics" FontSize="20" FontWeight="SemiBold" />
+
+        <!-- Logged out: email + password login / create account -->
+        <StackPanel Grid.Row="1" Margin="0,12,0,0" Spacing="8" IsVisible="{Binding !IsLoggedIn}"
+                    MaxWidth="420" HorizontalAlignment="Left" VerticalAlignment="Top">
+            <TextBlock Text="Statistics are tied to an account. Create one with your email and the in-game name you play under, then every ReplayKraken match with that name feeds your numbers."
+                       TextWrapping="Wrap" />
+            <TextBox Text="{Binding Email}" PlaceholderText="Email" />
+            <TextBox Text="{Binding Password}" PlaceholderText="Password" PasswordChar="●" />
+            <TextBlock Text="Create account" FontWeight="SemiBold" Margin="0,6,0,0" />
+            <TextBox Text="{Binding PlayerName}" PlaceholderText="Your in-game name" />
+            <TextBox Text="{Binding ConfirmPassword}" PlaceholderText="Repeat password" PasswordChar="●" />
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+                <Button Content="Log in" Command="{Binding LoginCommand}" IsEnabled="{Binding !Busy}" MinWidth="120" />
+                <Button Content="Create account" Command="{Binding RegisterCommand}" IsEnabled="{Binding !Busy}" MinWidth="120" />
+            </StackPanel>
+            <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!-- Logged in: profile + stats -->
+        <Grid Grid.Row="1" Margin="0,8,0,0" RowDefinitions="Auto,Auto,Auto,*,Auto"
+              IsVisible="{Binding IsLoggedIn}">
+
+            <!-- Account row -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto">
+                <TextBlock Grid.Column="0" Text="{Binding AccountLabel}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="Log out" Command="{Binding LogoutCommand}" Margin="16,0,0,0" />
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
+                    <TextBox Text="{Binding PlayerName}" PlaceholderText="In-game name" Width="160" />
+                    <Button Content="Update name" Command="{Binding UpdatePlayerNameCommand}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Sync + filter row -->
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="0,8,0,0">
+                <Button Grid.Column="0" Content="Sync now" Command="{Binding SyncNowCommand}"
+                        IsEnabled="{Binding !SyncBusy}" />
+                <ComboBox Grid.Column="1" Margin="8,0,0,0" Width="130"
+                          ItemsSource="{Binding Filters}" SelectedItem="{Binding SelectedFilter}" />
+                <TextBox Grid.Column="2" Margin="8,0,0,0" Width="200" Text="{Binding Search}"
+                         PlaceholderText="Search matches…" />
+                <TextBlock Grid.Column="4" Text="{Binding SyncLabel}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                           TextTrimming="CharacterEllipsis" MaxWidth="300" />
+            </Grid>
+
+            <!-- Summary strip -->
+            <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,10,0,0">
+                <TextBlock Grid.Column="0" Text="{Binding TotalGames, StringFormat='Games: {0}'}" Margin="0,0,18,0" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="1" Text="{Binding Wins, StringFormat='Wins: {0}'}" Margin="0,0,18,0" />
+                <TextBlock Grid.Column="2" Text="{Binding Losses, StringFormat='Losses: {0}'}" Margin="0,0,18,0" />
+                <TextBlock Grid.Column="3" Text="{Binding NoResult, StringFormat='No result: {0}'}" Margin="0,0,18,0" />
+                <TextBlock Grid.Column="4" Text="{Binding WinRateLabel, StringFormat='Win rate: {0}'}" Margin="0,0,18,0" />
+            </Grid>
+
+            <!-- Lists: races, matchups, top opponents -->
+            <Grid Grid.Row="3" ColumnDefinitions="*,*,1.2*" Margin="0,8,0,0">
+
+                <Grid Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,8,0">
+                    <TextBlock Grid.Row="0" Text="Races played" FontWeight="SemiBold" />
+                    <ListBox Grid.Row="1" Margin="0,4,0,0" ItemsSource="{Binding RaceRows}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:RaceRow">
+                                <Grid ColumnDefinitions="*,60,60,70">
+                                    <TextBlock Grid.Column="0" Text="{Binding Race}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Games}" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Wins}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding WinRate}" HorizontalAlignment="Right" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+
+                <Grid Grid.Column="1" RowDefinitions="Auto,*" Margin="0,0,8,0">
+                    <TextBlock Grid.Row="0" Text="Matchups" FontWeight="SemiBold" />
+                    <ListBox Grid.Row="1" Margin="0,4,0,0" ItemsSource="{Binding MatchupRows}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MatchupRow">
+                                <Grid ColumnDefinitions="*,50,50,60">
+                                    <TextBlock Grid.Column="0" Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Games}" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Wins}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding WinRate}" HorizontalAlignment="Right" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+
+                <Grid Grid.Column="2" RowDefinitions="Auto,*">
+                    <TextBlock Grid.Row="0" Text="Top 10 opponents" FontWeight="SemiBold" />
+                    <ListBox Grid.Row="1" Margin="0,4,0,0" ItemsSource="{Binding TopOpponents}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:OpponentRow">
+                                <Grid ColumnDefinitions="26,*,40,40,40,55,90">
+                                    <TextBlock Grid.Column="0" Text="{Binding RankLabel}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Games}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding Wins}" />
+                                    <TextBlock Grid.Column="4" Text="{Binding Losses}" />
+                                    <TextBlock Grid.Column="5" Text="{Binding WinRate}" HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Column="6" Text="{Binding TopMatchup}" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" Margin="8,0,0,0" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Grid>
+
+            <!-- Certification checklist -->
+            <Grid Grid.Row="4" RowDefinitions="Auto,Auto,*" Margin="0,10,0,0">
+                <TextBlock Grid.Row="0" Text="Certify your games" FontWeight="SemiBold" />
+                <TextBlock Grid.Row="1" Text="Check the games you really played so impostor names stop polluting your stats. Unchecked games stay searchable as uncertified."
+                           TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                           Margin="0,2,0,4" />
+                <ListBox Grid.Row="2" MaxHeight="170" ItemsSource="{Binding CertRows}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:MatchCertRow">
+                            <Grid ColumnDefinitions="Auto,110,*,90,50">
+                                <CheckBox Grid.Column="0" IsChecked="{Binding IsCertified}" />
+                                <TextBlock Grid.Column="1" Text="{Binding DateLabel}" />
+                                <TextBlock Grid.Column="2" Text="{Binding OpponentsLabel}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="3" Text="{Binding RaceLabel}" />
+                                <TextBlock Grid.Column="4" Text="{Binding ResultLabel}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Grid>
+    </Grid>
+
+</UserControl>

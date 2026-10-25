@@ -42,6 +42,30 @@ public static class AppRuntime
         CurrentUserChanged?.Invoke();
     }
 
+    /// <summary>Where statistics accounts live. Local today; ROADMAP.md
+    /// specifies the server implementation that replaces this later.</summary>
+    public static IAccountBackend AccountBackend { get; } = new LocalAccountBackend();
+
+    /// <summary>The statistics account signed in on this machine (email +
+    /// password account that claims an in-game name and certifies matches).</summary>
+    public static LocalAccount? CurrentLocalAccount { get; private set; }
+
+    /// <summary>Raised when the local account logs in / out / edits its name;
+    /// the Statistics tab listens to rebuild itself.</summary>
+    public static event Action? LocalAccountChanged;
+
+    public static void SetLocalAccount(LocalAccount? account)
+    {
+        CurrentLocalAccount = account;
+        LocalAccountChanged?.Invoke();
+    }
+
+    /// <summary>Raised whenever a match certification changes so the Replays
+    /// tab can refresh its badges and the Statistics tab its numbers.</summary>
+    public static event Action? CertificationsChanged;
+
+    public static void NotifyCertificationsChanged() => CertificationsChanged?.Invoke();
+
     /// <summary>Set from MainWindow once the surface exists; used by
     /// "Share note"/"Share list" to copy exports.</summary>
     public static Avalonia.Input.Platform.IClipboard? Clipboard { get; set; }

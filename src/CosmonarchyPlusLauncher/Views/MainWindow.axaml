@@ -29,6 +29,9 @@
         <TabItem Header="Account">
             <views:AccountPage />
         </TabItem>
+        <TabItem Header="Statistics">
+            <views:StatisticsPage />
+        </TabItem>
         <TabItem Header="Replays">
             <views:ReplaysPage />
         </TabItem>
