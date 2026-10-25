@@ -1389,6 +1389,44 @@ public class CoreTests
         Assert.False(history[1].Certified);
     }
 
+    [Fact]
+    public void Statistics_channel_split_keeps_plus_and_original_separate()
+    {
+        OnlineMatch Match(string uuid, string kind, int? winner) => new(
+            uuid, DateTimeOffset.UtcNow, "Map", TimeSpan.FromMinutes(5), "daf2a27", kind,
+            [
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("opp", "Terran", "Human", 100, 1),
+            ],
+            "uploader", "file-" + uuid, WinnerTeam: winner);
+
+        var matches = new[]
+        {
+            Match("plus-1", "Prerelease", 0),
+            Match("plus-2", "Prerelease", 1),
+            Match("og-1", "", 0),
+            Match("og-2", "Release", 0),
+        };
+        var certified = new HashSet<string>();
+
+        var all = StatisticsService.Compute(matches, "me", certified);
+        var plus = StatisticsService.Compute(matches, "me", certified, channel: ChannelFilter.Plus);
+        var og = StatisticsService.Compute(matches, "me", certified, channel: ChannelFilter.Original);
+
+        Assert.Equal(4, all.TotalGames);
+        Assert.Equal(2, plus.TotalGames);
+        Assert.Equal(1, plus.Wins);
+        Assert.Equal(1, plus.Losses);
+        Assert.Equal(2, og.TotalGames);
+        Assert.Equal(2, og.Wins);
+        Assert.Equal(2, all.PlusGames);
+        Assert.Equal(2, all.OriginalGames);
+
+        // Head-to-head respects the channel too.
+        Assert.Equal(2, StatisticsService.HeadToHead(matches, "me", "opp", certified, ChannelFilter.Plus).Count);
+        Assert.Equal(2, StatisticsService.HeadToHead(matches, "me", "opp", certified, ChannelFilter.Original).Count);
+    }
+
     // ---- Local accounts ----------------------------------------------------
 
     [Fact]

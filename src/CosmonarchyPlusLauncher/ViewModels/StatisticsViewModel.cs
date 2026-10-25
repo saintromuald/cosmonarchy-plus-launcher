@@ -109,6 +109,10 @@ public sealed record AccountOption(LocalAccount Account)
     public string Label => $"{Account.Email} — {Account.PlayerName}";
 }
 
+/// <summary>One channel choice: everything together, the original game, or
+/// Cosmonarchy Plus only.</summary>
+public sealed record ChannelOption(ChannelFilter Value, string Label);
+
 public partial class StatisticsViewModel : ViewModelBase
 {
     private readonly LocalAccountBackend _backend = (LocalAccountBackend)AppRuntime.AccountBackend;
@@ -117,6 +121,7 @@ public partial class StatisticsViewModel : ViewModelBase
 
     public StatisticsViewModel()
     {
+        _selectedChannel = Channels[0];
         AppRuntime.LocalAccountChanged += OnAccountChanged;
         AppRuntime.CertificationsChanged += OnCertificationsChanged;
         UpdateAccountState();
@@ -309,7 +314,17 @@ public partial class StatisticsViewModel : ViewModelBase
     public static IReadOnlyList<CertificationFilter> Filters { get; } =
         [CertificationFilter.All, CertificationFilter.Certified, CertificationFilter.Uncertified];
 
+    /// <summary>The channel choices that split the statistics into the
+    /// original game and Cosmonarchy Plus.</summary>
+    public static IReadOnlyList<ChannelOption> Channels { get; } =
+    [
+        new(ChannelFilter.All, "All channels"),
+        new(ChannelFilter.Original, "Cosmonarchy OG"),
+        new(ChannelFilter.Plus, "Cosmonarchy Plus"),
+    ];
+
     [ObservableProperty] private CertificationFilter _selectedFilter = CertificationFilter.All;
+    [ObservableProperty] private ChannelOption _selectedChannel;
     [ObservableProperty] private string _search = "";
     [ObservableProperty] private bool _syncBusy;
 
@@ -355,7 +370,8 @@ public partial class StatisticsViewModel : ViewModelBase
         if (row is null || AppRuntime.CurrentLocalAccount is not { } account)
             return;
         var certified = LocalAccountBackend.CertifiedSet(account);
-        var entries = StatisticsService.HeadToHead(_matches, account.PlayerName, row.Name, certified);
+        var entries = StatisticsService.HeadToHead(
+            _matches, account.PlayerName, row.Name, certified, SelectedChannel.Value);
 
         OpponentMatches.Clear();
         foreach (var entry in entries)
@@ -382,6 +398,7 @@ public partial class StatisticsViewModel : ViewModelBase
     }
 
     partial void OnSelectedFilterChanged(CertificationFilter value) => Rebuild();
+    partial void OnSelectedChannelChanged(ChannelOption? value) => Rebuild();
     partial void OnSearchChanged(string value) => RebuildCertList();
 
     [RelayCommand]
@@ -453,7 +470,8 @@ public partial class StatisticsViewModel : ViewModelBase
         }
 
         var certified = LocalAccountBackend.CertifiedSet(account);
-        var stats = StatisticsService.Compute(_matches, account.PlayerName, certified, SelectedFilter);
+        var stats = StatisticsService.Compute(
+            _matches, account.PlayerName, certified, SelectedFilter, SelectedChannel.Value);
 
         TotalGames = stats.TotalGames;
         Wins = stats.Wins;
@@ -503,7 +521,7 @@ public partial class StatisticsViewModel : ViewModelBase
 
         var certified = LocalAccountBackend.CertifiedSet(account);
         var entries = recent ?? StatisticsService
-            .BuildEntries(_matches, account.PlayerName, certified, CertificationFilter.All);
+            .BuildEntries(_matches, account.PlayerName, certified, CertificationFilter.All, SelectedChannel.Value);
 
         var wanted = Search.Trim();
         if (wanted.Length > 0)

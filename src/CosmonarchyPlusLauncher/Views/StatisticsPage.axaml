@@ -69,17 +69,25 @@
                 </StackPanel>
             </Grid>
 
-            <!-- Sync + filter row -->
-            <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="0,8,0,0">
+            <!-- Sync + channel + filter row -->
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="0,8,0,0">
                 <Button Grid.Column="0" Content="Sync now" Command="{Binding SyncNowCommand}"
                         IsEnabled="{Binding !SyncBusy}" />
-                <ComboBox Grid.Column="1" Margin="8,0,0,0" Width="130"
+                <ComboBox Grid.Column="1" Margin="8,0,0,0" Width="150"
+                          ItemsSource="{Binding Channels}" SelectedItem="{Binding SelectedChannel}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ChannelOption">
+                            <TextBlock Text="{Binding Label}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <ComboBox Grid.Column="2" Margin="8,0,0,0" Width="120"
                           ItemsSource="{Binding Filters}" SelectedItem="{Binding SelectedFilter}" />
-                <TextBox Grid.Column="2" Margin="8,0,0,0" Width="200" Text="{Binding Search}"
+                <TextBox Grid.Column="3" Margin="8,0,0,0" Width="190" Text="{Binding Search}"
                          PlaceholderText="Search matches…" />
-                <TextBlock Grid.Column="4" Text="{Binding SyncLabel}" VerticalAlignment="Center"
+                <TextBlock Grid.Column="5" Text="{Binding SyncLabel}" VerticalAlignment="Center"
                            Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                           TextTrimming="CharacterEllipsis" MaxWidth="300" />
+                           TextTrimming="CharacterEllipsis" MaxWidth="260" />
             </Grid>
 
             <!-- Summary strip -->

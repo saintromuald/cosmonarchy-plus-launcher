@@ -33,16 +33,33 @@ public static class StatisticsService
             .ToList();
     }
 
+    /// <summary>True when the match was played on a Cosmonarchy Plus
+    /// (Prerelease) build. The original game is everything else, matching the
+    /// classification the Replays tab uses.</summary>
+    internal static bool IsPlusChannel(OnlineMatch match) =>
+        ReplayBuildResolver.IsPrerelease(match.GameVersionKind);
+
+    /// <summary>Narrow a match list to one channel (Plus / original / all).</summary>
+    public static IReadOnlyList<OnlineMatch> FilterChannel(
+        IEnumerable<OnlineMatch> matches, ChannelFilter channel) => channel switch
+    {
+        ChannelFilter.Plus => matches.Where(IsPlusChannel).ToList(),
+        ChannelFilter.Original => matches.Where(m => !IsPlusChannel(m)).ToList(),
+        _ => matches.ToList(),
+    };
+
     /// <summary>Every match the claimed name played against one opponent,
     /// newest first — the head-to-head history behind the Opponents tab.
-    /// Only games where both names appear are included.</summary>
+    /// Only games where both names appear are included, scoped to
+    /// <paramref name="channel"/>.</summary>
     public static IReadOnlyList<PlayerMatchEntry> HeadToHead(
         IEnumerable<OnlineMatch> matches,
         string playerName,
         string opponentName,
-        IReadOnlySet<string> certified)
+        IReadOnlySet<string> certified,
+        ChannelFilter channel = ChannelFilter.All)
     {
-        var entries = BuildEntries(matches, playerName, certified, CertificationFilter.All);
+        var entries = BuildEntries(matches, playerName, certified, CertificationFilter.All, channel);
         return entries
             .Where(e => e.Opponents.Any(o =>
                 o.Name.Equals(opponentName, StringComparison.OrdinalIgnoreCase)))
@@ -51,18 +68,18 @@ public static class StatisticsService
 
     /// <summary>Full profile for the claimed name. <paramref name="certified"/>
     /// holds the account's certified match UUIDs; the filter selects which
-    /// slice of the history feeds the numbers. Certification coverage is
-    /// always measured against the whole history, not the slice.</summary>
+    /// slice of the history feeds the numbers. <paramref name="channel"/>
+    /// scopes to the original game or Cosmonarchy Plus. Certification coverage
+    /// is always measured against the whole history, not the slice.</summary>
     public static PlayerStats Compute(
         IEnumerable<OnlineMatch> matches,
         string playerName,
         IReadOnlySet<string> certified,
-        CertificationFilter filter = CertificationFilter.All)
+        CertificationFilter filter = CertificationFilter.All,
+        ChannelFilter channel = ChannelFilter.All)
     {
-        var allEntries = BuildEntries(matches, playerName, certified, CertificationFilter.All);
-        var entries = filter == CertificationFilter.All
-            ? allEntries
-            : allEntries.Where(e => e.Certified == (filter == CertificationFilter.Certified)).ToList();
+        var allEntries = BuildEntries(matches, playerName, certified, CertificationFilter.All, ChannelFilter.All);
+        var entries = BuildEntries(matches, playerName, certified, filter, channel);
         return Aggregate(entries, allEntries);
     }
 
@@ -72,14 +89,15 @@ public static class StatisticsService
         IEnumerable<OnlineMatch> matches,
         string playerName,
         IReadOnlySet<string> certified,
-        CertificationFilter filter = CertificationFilter.All)
+        CertificationFilter filter = CertificationFilter.All,
+        ChannelFilter channel = ChannelFilter.All)
     {
         if (string.IsNullOrWhiteSpace(playerName))
             return [];
         var wanted = playerName.Trim();
         var result = new List<PlayerMatchEntry>();
 
-        foreach (var match in matches)
+        foreach (var match in FilterChannel(matches, channel))
         {
             var mine = match.Players
                 .Where(p => p.Name.Equals(wanted, StringComparison.OrdinalIgnoreCase))

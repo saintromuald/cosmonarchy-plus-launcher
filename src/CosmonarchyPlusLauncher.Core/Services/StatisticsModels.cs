@@ -12,6 +12,15 @@ public enum CertificationFilter
     Uncertified,
 }
 
+/// <summary>Which channel's games feed the statistics: everything together,
+/// only the original game, or only Cosmonarchy Plus (Prerelease builds).</summary>
+public enum ChannelFilter
+{
+    All,
+    Original,
+    Plus,
+}
+
 public enum MatchResult
 {
     Win,
