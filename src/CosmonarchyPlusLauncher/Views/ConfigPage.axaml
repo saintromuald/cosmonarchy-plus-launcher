@@ -1,0 +1,55 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CosmonarchyPlusLauncher.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="560"
+             x:Class="CosmonarchyPlusLauncher.Views.ConfigPage"
+             x:DataType="vm:ConfigViewModel">
+
+    <Grid Margin="16" RowDefinitions="Auto,Auto,*,Auto">
+
+        <TextBlock Grid.Row="0" Text="Cosmonarchy Plus config" FontSize="20" FontWeight="SemiBold" />
+
+        <!-- Version + file pickers and actions. -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto,Auto,Auto,*" Margin="0,12,0,0">
+            <TextBlock Grid.Column="0" Text="Version" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding Installed}"
+                      SelectedItem="{Binding SelectedInstall}" MinWidth="180">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Name}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Grid.Column="2" Text="File" VerticalAlignment="Center" Margin="8,0,6,0" />
+            <ComboBox Grid.Column="3" ItemsSource="{Binding Files}"
+                      SelectedItem="{Binding SelectedFile}" MinWidth="220" />
+            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8" Margin="8,0,0,0">
+                <Button Content="Reload" Command="{Binding LoadCommand}" MinWidth="90" />
+                <Button Content="Save" Command="{Binding SaveCommand}" MinWidth="90"
+                        IsEnabled="{Binding CanEdit}"
+                        IsDefault="False" />
+            </StackPanel>
+            <TextBlock Grid.Column="5" Text="{Binding Status}" VerticalAlignment="Center"
+                       Margin="8,0,0,0" TextWrapping="Wrap"
+                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+        </Grid>
+
+        <!-- Editor. -->
+        <TextBox Grid.Row="2" Text="{Binding ConfigText}" Margin="0,10,0,0"
+                 AcceptsReturn="True" TextWrapping="NoWrap"
+                 FontFamily="Cascadia Mono,Menlo,Consolas,monospace" FontSize="13"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 IsEnabled="{Binding CanEdit}"
+                 Watermark="No config file here yet — Save creates it." />
+
+        <TextBlock Grid.Row="3"
+                   Text="The Plus plugin reads plus.yml (cost overrides, gas-tier deltas, advanced-worker tuning, ultraload) and cosmo_plus.conf (mode and env-style switches) from the game directory first, then plugins/. Edits apply to the selected installed version only, and the game picks them up on its next launch. Save refuses invalid YAML so a typo cannot break the config parser."
+                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                   Margin="0,10,0,0" TextWrapping="Wrap" />
+
+    </Grid>
+
+</UserControl>
