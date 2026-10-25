@@ -23,6 +23,9 @@
         <TabItem Header="Settings">
             <views:SettingsPage />
         </TabItem>
+        <TabItem Header="Config">
+            <views:ConfigPage />
+        </TabItem>
         <TabItem Header="Account">
             <views:AccountPage />
         </TabItem>
