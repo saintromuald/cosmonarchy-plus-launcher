@@ -21,7 +21,8 @@ public sealed record OnlineMatch(
     IReadOnlyList<OnlinePlayer> Players,
     string UploaderName,
     string FileId,
-    bool HasDesync = false)
+    bool HasDesync = false,
+    int? WinnerTeam = null)
 {
     /// <summary>"A (Zerg) vs B (Terran)" — team boundaries are not shown.</summary>
     [JsonIgnore]

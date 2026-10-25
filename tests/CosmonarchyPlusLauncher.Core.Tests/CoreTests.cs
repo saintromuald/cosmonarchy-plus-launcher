@@ -1123,4 +1123,208 @@ public class CoreTests
         else
             Assert.Equal(expected, parsed);
     }
+
+    // ---- Statistics --------------------------------------------------------
+
+    private static OnlineMatch StatMatch(string uuid, int? winnerTeam, params OnlinePlayer[] players) => new(
+        uuid, DateTimeOffset.UtcNow.AddMinutes(-players.Length), "Map", TimeSpan.FromMinutes(5),
+        "daf2a27", "Prerelease", players, "uploader", "file-" + uuid, WinnerTeam: winnerTeam);
+
+    [Fact]
+    public void Statistics_computes_wins_losses_and_race_breakdown()
+    {
+        var matches = new[]
+        {
+            StatMatch("m1", 0,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("opp", "Terran", "Human", 100, 1)),
+            StatMatch("m2", 1,
+                new OnlinePlayer("me", "Protoss", "Human", 100, 0),
+                new OnlinePlayer("opp", "Zerg", "Human", 100, 1)),
+            StatMatch("m3", 0,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("rival", "Protoss", "Human", 100, 1)),
+        };
+
+        var stats = StatisticsService.Compute(matches, "ME", new HashSet<string>());
+
+        Assert.Equal(3, stats.TotalGames);
+        Assert.Equal(2, stats.Wins);
+        Assert.Equal(1, stats.Losses);
+        Assert.Equal(0, stats.NoResult);
+        Assert.Equal(2, stats.Races.Single(r => r.Race == "Zerg").Games);
+        Assert.Equal(1, stats.Races.Single(r => r.Race == "Protoss").Games);
+    }
+
+    [Fact]
+    public void Statistics_top_opponents_rank_by_games_then_wins()
+    {
+        OnlineMatch Versus(string name, string uuid, int? winner) => StatMatch(uuid, winner,
+            new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+            new OnlinePlayer(name, "Terran", "Human", 100, 1));
+
+        var matches = new[]
+        {
+            Versus("frequent", "a", 0),
+            Versus("frequent", "b", 1),
+            Versus("frequent", "c", 0),
+            Versus("second", "d", 0),
+            Versus("third", "e", 0),
+        };
+
+        var stats = StatisticsService.Compute(matches, "me", new HashSet<string>());
+        var top = stats.TopOpponents;
+
+        Assert.Equal(3, top.Count);
+        Assert.Equal("frequent", top[0].Name);
+        Assert.Equal(3, top[0].Games);
+        Assert.Equal(2, top[0].Wins);
+        Assert.Equal(1, top[0].Losses);
+        Assert.Equal("second", top[1].Name);
+        Assert.Contains("Zerg vs Terran", top[0].TopMatchup);
+    }
+
+    [Fact]
+    public void Statistics_mirror_match_and_missing_winner_count_without_result()
+    {
+        var matches = new[]
+        {
+            // me on both teams: no single team to score.
+            StatMatch("mirror", 0,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("me", "Zerg", "Human", 100, 1)),
+            // winnerTeam 4 = not recorded.
+            StatMatch("unknown", 4,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("opp", "Zerg", "Human", 100, 1)),
+        };
+
+        var stats = StatisticsService.Compute(matches, "me", new HashSet<string>());
+
+        Assert.Equal(2, stats.TotalGames);
+        Assert.Equal(0, stats.Wins);
+        Assert.Equal(0, stats.Losses);
+        Assert.Equal(2, stats.NoResult);
+    }
+
+    [Fact]
+    public void Statistics_certification_filter_splits_certified_from_uncertified()
+    {
+        var matches = new[]
+        {
+            StatMatch("real", 0,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("opp", "Terran", "Human", 100, 1)),
+            StatMatch("fake", 1,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("opp", "Terran", "Human", 100, 1)),
+        };
+        var certified = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "real" };
+
+        Assert.Equal(2, StatisticsService.Compute(matches, "me", certified, CertificationFilter.All).TotalGames);
+        Assert.Single(StatisticsService.Compute(matches, "me", certified, CertificationFilter.Certified).RecentMatches);
+        Assert.Equal("real", StatisticsService.Compute(matches, "me", certified, CertificationFilter.Certified)
+            .RecentMatches[0].Match.MatchUuid);
+        Assert.Single(StatisticsService.Compute(matches, "me", certified, CertificationFilter.Uncertified).RecentMatches);
+        Assert.Equal("fake", StatisticsService.Compute(matches, "me", certified, CertificationFilter.Uncertified)
+            .RecentMatches[0].Match.MatchUuid);
+    }
+
+    [Fact]
+    public void Statistics_computer_slots_are_not_opponents()
+    {
+        var matches = new[]
+        {
+            StatMatch("m1", 0,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("human", "Terran", "Human", 100, 1),
+                new OnlinePlayer("bot", "Protoss", "Computer", 0, 1)),
+        };
+
+        var stats = StatisticsService.Compute(matches, "me", new HashSet<string>());
+
+        Assert.Single(stats.TopOpponents);
+        Assert.Equal("human", stats.TopOpponents[0].Name);
+    }
+
+    // ---- Local accounts ----------------------------------------------------
+
+    [Fact]
+    public async Task LocalAccount_registers_logs_in_and_verifies_password()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-accounts-{Guid.NewGuid():N}.json");
+        try
+        {
+            var backend = new LocalAccountBackend(path);
+
+            var (session, error) = await backend.RegisterAsync("me@example.com", "hunter2secret", "Groovy");
+            Assert.NotNull(session);
+            Assert.Equal("", error);
+            Assert.Equal("Groovy", session!.Account.PlayerName);
+            Assert.DoesNotContain("hunter2secret", File.ReadAllText(path)); // never plaintext
+
+            var ok = await backend.LoginAsync("ME@example.com", "hunter2secret");
+            Assert.NotNull(ok);
+
+            var wrong = await backend.LoginAsync("me@example.com", "wrong-password");
+            Assert.Null(wrong);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task LocalAccount_rejects_duplicates_weak_passwords_and_bad_emails()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-accounts-{Guid.NewGuid():N}.json");
+        try
+        {
+            var backend = new LocalAccountBackend(path);
+
+            var (first, _) = await backend.RegisterAsync("a@b.com", "longenough", "Groovy");
+            Assert.NotNull(first);
+
+            var (dup, dupError) = await backend.RegisterAsync("A@b.com", "longenough", "Impostor");
+            Assert.Null(dup);
+            Assert.Contains("already exists", dupError);
+
+            var (shortPw, shortError) = await backend.RegisterAsync("c@d.com", "short", "X");
+            Assert.Null(shortPw);
+            Assert.Contains("at least", shortError);
+
+            var (badMail, mailError) = await backend.RegisterAsync("not-an-email", "longenough", "X");
+            Assert.Null(badMail);
+            Assert.Contains("valid email", mailError);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task LocalAccount_certifications_round_trip()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-accounts-{Guid.NewGuid():N}.json");
+        try
+        {
+            var backend = new LocalAccountBackend(path);
+            var (session, _) = await backend.RegisterAsync("a@b.com", "longenough", "Groovy");
+
+            await backend.SetCertificationAsync(session!, "match-1", certified: true);
+            await backend.SetCertificationAsync(session!, "match-2", certified: true);
+            await backend.SetCertificationAsync(session!, "match-1", certified: false);
+
+            var reloaded = await backend.LoginAsync("a@b.com", "longenough");
+            var set = LocalAccountBackend.CertifiedSet(reloaded!.Account);
+            Assert.DoesNotContain("match-1", set);
+            Assert.Contains("match-2", set);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

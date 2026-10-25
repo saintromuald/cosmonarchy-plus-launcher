@@ -59,6 +59,9 @@
                     <CheckBox Content="Favourites only" IsChecked="{Binding FavoritesOnly}" />
                     <CheckBox Content="Watched only" IsChecked="{Binding WatchedOnly}" />
                     <CheckBox Content="With notes only" IsChecked="{Binding WithNotesOnly}" />
+                    <TextBlock Text="Certification:" VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding CertificationFilters}" SelectedItem="{Binding CertFilter}"
+                              Width="120" />
                     <Button Content="Clear filters" Command="{Binding ClearFiltersCommand}" />
                 </StackPanel>
 
@@ -299,14 +302,16 @@
                 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                 IsVisible="{Binding HasNoteContext}">
             <Grid RowDefinitions="Auto,Auto,Auto,Auto">
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Column="0" Text="{Binding NoteHeader}" FontWeight="SemiBold"
                                TextTrimming="CharacterEllipsis" />
-                    <Button Grid.Column="1" Content="Toggle favourite" Command="{Binding ToggleFavoriteCommand}"
+                    <Button Grid.Column="1" Content="{Binding CertifyContent}" Command="{Binding ToggleCertifyCommand}"
+                            IsEnabled="{Binding CanCertify}" Margin="8,0,0,0" />
+                    <Button Grid.Column="2" Content="Toggle favourite" Command="{Binding ToggleFavoriteCommand}"
                             Margin="8,0,0,0" />
-                    <Button Grid.Column="2" Content="Share note" Command="{Binding ShareNoteCommand}"
+                    <Button Grid.Column="3" Content="Share note" Command="{Binding ShareNoteCommand}"
                             Margin="6,0,0,0" />
-                    <Button Grid.Column="3" Content="Post to Discord" Command="{Binding PostNoteToDiscordCommand}"
+                    <Button Grid.Column="4" Content="Post to Discord" Command="{Binding PostNoteToDiscordCommand}"
                             Margin="6,0,0,0" />
                 </Grid>
 
