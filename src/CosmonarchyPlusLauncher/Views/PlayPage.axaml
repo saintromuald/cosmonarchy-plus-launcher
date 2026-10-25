@@ -129,6 +129,7 @@
         <Border Grid.Row="2" Margin="0,10,0,0" Padding="10"
                 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                 CornerRadius="4">
+            <StackPanel Spacing="4">
             <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="Variant:" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -147,6 +148,10 @@
                         Command="{Binding UnshallowCommand}"
                         IsEnabled="{Binding CanInstall}" />
             </Grid>
+            <TextBlock Text="{Binding RoleWarning}" IsVisible="{Binding RoleWarningVisible}"
+                       Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                       FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
         </Border>
 
         <Border Grid.Row="3" Margin="0,10,0,0" Padding="10"

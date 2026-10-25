@@ -37,7 +37,16 @@ public sealed class AppSettings
 
     public Variant Variant { get; set; } = Variant.Original;
 
+    /// <summary>Netcode role for Netcode launches (Host/guest only; the armed
+    /// turn system takes over mouse/keyboard input).</summary>
     public NetcodeRole? NetcodeRole { get; set; }
+
+    /// <summary>Role for Plus launches. Solo is normal play (the rollback
+    /// plugin is staged but disarmed); Host/Guest arms the rollback turn
+    /// system, which ignores ordinary mouse and keyboard input while it is
+    /// under development. Defaults to Solo so a normal Play never arms.</summary>
+    public NetcodeRole PlusRole { get; set; } =
+        global::CosmonarchyPlusLauncher.Core.Models.NetcodeRole.Solo;
 
     public ActionOnPlay ActionOnPlay { get; set; } = ActionOnPlay.StayOpen;
 

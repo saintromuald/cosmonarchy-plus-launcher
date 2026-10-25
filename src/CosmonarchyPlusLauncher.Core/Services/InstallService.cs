@@ -77,24 +77,37 @@ public sealed class InstallService
         await InstallAsync(progress, ct);
         // The version's own family decides the staging: an Original install
         // never picks up the Plus plugin just because the Play page's filter
-        // was left on Plus (and a Netcode install always arms rollback).
-        var variant = _version.EffectiveVariant;
-        var role = variant switch
-        {
-            Variant.Original => null,
-            // Rollback only has host (slot 0) and guest (slot 1); Solo is a
-            // Plus concept and must not arm slot 0 as a "solo" netcode game.
-            Variant.Netcode => _settings.NetcodeRole == NetcodeRole.Guest
-                ? NetcodeRole.Guest
-                : NetcodeRole.Host,
-            _ => _settings.NetcodeRole,
-        };
+        // was left on Plus. Plus uses its own role setting (Solo = normal
+        // play); only an explicit Host/Guest pick arms the rollback netcode,
+        // whose turn system takes over mouse and keyboard input.
+        var (variant, role) = StagingFor(_settings, _version);
         var stager = new PluginStager(RepoDir, StageDir,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         stager.Apply(variant, role);
         progress?.Report($"Launching {_version.Name} ({variant})");
         EnsureFullscreenDisplay(progress);
         await LaunchAsync(ct);
+    }
+
+    /// <summary>Which plugin set (and netcode arming) a play of
+    /// <paramref name="version"/> uses. Separated for tests: the rules are
+    /// the whole point of the variant families.</summary>
+    internal static (Variant Variant, NetcodeRole? Role) StagingFor(
+        AppSettings settings, GameVersion version)
+    {
+        var variant = version.EffectiveVariant;
+        return variant switch
+        {
+            Variant.Original => (variant, null),
+            // Rollback only has host (slot 0) and guest (slot 1); Solo is a
+            // Plus concept and must not arm slot 0 as a "solo" netcode game.
+            Variant.Netcode => (variant, settings.NetcodeRole is NetcodeRole.Guest
+                ? NetcodeRole.Guest
+                : NetcodeRole.Host),
+            // Plus: Solo (default) disarms; Host/Guest arms the rollback
+            // turn system on purpose (netcode testing).
+            _ => (variant, settings.PlusRole),
+        };
     }
 
     /// <summary>Copy a replay into the game's replay directory and launch

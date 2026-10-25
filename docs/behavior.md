@@ -136,14 +136,18 @@ The Play page's bottom **Variant** dropdown is the master switch:
 | Filter | Installable repositories | Installed list | Staging on play |
 | --- | --- | --- | --- |
 | Original | Stable (upstream release), Prerelease, Original/old-release/nightly archives, unofficial mirrors | Original builds | no plugin; rollback qdp inert |
-| Plus | Plus mirror builds (plus branch), Plus plugin package | Plus builds and the Plus plugin | Plus + rollback staged; role or solo |
+| Plus | Plus mirror builds (plus branch), Plus plugin package | Plus builds and the Plus plugin | Plus + rollback staged; **Solo by default** (disarmed); Host/Guest arms the rollback turn system |
 | Netcode | Plus mirror builds, Rollback plugin package | Netcode builds and the rollback plugin | rollback armed; host/guest only |
 
 Each installed row carries a coloured ORIGINAL / PLUS / NETCODE badge and a
 Build/Plugin label. The variant stored on a version decides its staging, so
 pressing Play on an Original install never picks up a Plus plugin because the
 filter was left on Plus. Within one browser session the variant remembers the
-repository last picked in it.
+repository last picked in it. Each family keeps its own netcode role (Plus
+role defaults to Solo; Netcode to Host), and switching filters never changes
+another family's role — the armed turn system takes over the mouse and
+keyboard, so normal Plus play must never arm it accidentally. The Play page
+shows a warning whenever the chosen role would arm.
 
 The build's `plugins/*.qdp` set determines what the game loads:
 
