@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CosmonarchyPlusLauncher.Core.Models;
 using CosmonarchyPlusLauncher.Core.Services;
 using CosmonarchyPlusLauncher.Core.Settings;
@@ -1430,6 +1431,73 @@ public class CoreTests
             var set = LocalAccountBackend.CertifiedSet(reloaded!.Account);
             Assert.DoesNotContain("match-1", set);
             Assert.Contains("match-2", set);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task LocalAccount_certifications_record_who_certified()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-accounts-{Guid.NewGuid():N}.json");
+        try
+        {
+            var backend = new LocalAccountBackend(path);
+            var (session, _) = await backend.RegisterAsync("groovy@example.com", "longenough", "Groovy");
+
+            await backend.SetCertificationAsync(session!, "match-1", certified: true);
+
+            var reloaded = await backend.LoginAsync("groovy@example.com", "longenough");
+            var cert = LocalAccountBackend.CertificationFor(reloaded!.Account, "match-1");
+
+            Assert.NotNull(cert);
+            Assert.Equal("groovy@example.com", cert!.Email);
+            Assert.Equal("Groovy", cert.PlayerName);
+            Assert.Equal("Groovy (groovy@example.com)", cert.IdentityLabel);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task LocalAccount_migrates_legacy_uuid_certifications()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-accounts-{Guid.NewGuid():N}.json");
+        try
+        {
+            // Pre-identity account file: certifications were bare UUID strings.
+            File.WriteAllText(path,
+                """
+                [
+                  {
+                    "Id": "acct",
+                    "Email": "groovy@example.com",
+                    "PlayerName": "Groovy",
+                    "Salt": "",
+                    "PasswordHash": "",
+                    "CreatedAt": "2026-10-24T00:00:00+00:00",
+                    "Certifications": [],
+                    "CertifiedMatchUuids": ["match-9"]
+                  }
+                ]
+                """);
+
+            // Login fails (the fixture has no valid password) but loading the
+            // account file is what runs the migration.
+            var backend = new LocalAccountBackend(path);
+            var session = await backend.LoginAsync("groovy@example.com", "whatever");
+            Assert.Null(session);
+
+            var accounts = JsonSerializer.Deserialize<List<LocalAccount>>(File.ReadAllText(path))!;
+            Assert.Empty(accounts[0].CertifiedMatchUuids);
+            var cert = accounts[0].Certifications.SingleOrDefault(c => c.MatchUuid == "match-9");
+            Assert.NotNull(cert);
+            Assert.Equal("groovy@example.com", cert!.Email);
+            Assert.Equal("Groovy", cert.PlayerName);
         }
         finally
         {
