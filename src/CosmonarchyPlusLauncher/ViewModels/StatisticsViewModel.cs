@@ -40,6 +40,7 @@ public sealed record RaceRow(RaceStats Stats)
     public string Games => Stats.Games.ToString();
     public string Wins => Stats.Wins.ToString();
     public string WinRate => Stats.WinRateLabel;
+    public string Desyncs => Stats.DesyncsLabel;
 }
 
 /// <summary>Display row for one race-vs-race matchup cell.</summary>
@@ -51,7 +52,7 @@ public sealed record MatchupRow(MatchupStats Stats)
     public string WinRate => Stats.WinRateLabel;
 }
 
-/// <summary>Display row for one opponent in the top ten.</summary>
+/// <summary>Display row for one opponent in the top twenty-five.</summary>
 public sealed record OpponentRow(OpponentStats Stats, int Rank)
 {
     public string RankLabel => Rank.ToString();
@@ -60,7 +61,16 @@ public sealed record OpponentRow(OpponentStats Stats, int Rank)
     public string Wins => Stats.Wins.ToString();
     public string Losses => Stats.Losses.ToString();
     public string WinRate => Stats.WinRateLabel;
-    public string TopMatchup => Stats.TopMatchup;
+    public string MatchupSummary => Stats.MatchupSummary;
+}
+
+/// <summary>Display row for one map in the profile.</summary>
+public sealed record MapRow(MapStats Stats)
+{
+    public string Map => Stats.Map;
+    public string Games => Stats.Games.ToString();
+    public string Wins => Stats.Wins.ToString();
+    public string WinRate => Stats.WinRateLabel;
 }
 
 public partial class StatisticsViewModel : ViewModelBase
@@ -203,6 +213,7 @@ public partial class StatisticsViewModel : ViewModelBase
     public ObservableCollection<RaceRow> RaceRows { get; } = [];
     public ObservableCollection<MatchupRow> MatchupRows { get; } = [];
     public ObservableCollection<OpponentRow> TopOpponents { get; } = [];
+    public ObservableCollection<MapRow> MapRows { get; } = [];
     public ObservableCollection<MatchCertRow> CertRows { get; } = [];
 
     [ObservableProperty] private string _summaryLabel = "Sign in to see your statistics.";
@@ -212,6 +223,13 @@ public partial class StatisticsViewModel : ViewModelBase
     [ObservableProperty] private int _losses;
     [ObservableProperty] private int _noResult;
     [ObservableProperty] private int _certifiedGames;
+    [ObservableProperty] private int _desyncGames;
+    [ObservableProperty] private string _apmLabel = "—";
+    [ObservableProperty] private string _formLabel = "";
+    [ObservableProperty] private string _teamSizeLabel = "—";
+    [ObservableProperty] private string _channelLabel = "—";
+    [ObservableProperty] private string _averageDurationLabel = "—";
+    [ObservableProperty] private string _certificationLabel = "—";
     [ObservableProperty] private string _syncLabel = "Statistics are computed from cosmonarchy.com (ReplayKraken) matches that include your claimed name.";
 
     partial void OnSelectedFilterChanged(CertificationFilter value) => Rebuild();
@@ -293,7 +311,14 @@ public partial class StatisticsViewModel : ViewModelBase
         Losses = stats.Losses;
         NoResult = stats.NoResult;
         CertifiedGames = stats.CertifiedGames;
+        DesyncGames = stats.DesyncGames;
         WinRateLabel = stats.WinRateLabel;
+        ApmLabel = stats.ApmLabel;
+        FormLabel = stats.FormLabel;
+        TeamSizeLabel = stats.TeamSizeLabel;
+        ChannelLabel = stats.ChannelLabel;
+        AverageDurationLabel = stats.AverageDurationLabel;
+        CertificationLabel = stats.CertificationLabel;
         SummaryLabel = $"Statistics for “{account.PlayerName}” — {stats.TotalGames} game(s) shown.";
 
         RaceRows.Clear();
@@ -308,6 +333,10 @@ public partial class StatisticsViewModel : ViewModelBase
         var rank = 1;
         foreach (var opponent in stats.TopOpponents)
             TopOpponents.Add(new OpponentRow(opponent, rank++));
+
+        MapRows.Clear();
+        foreach (var map in stats.TopMaps)
+            MapRows.Add(new MapRow(map));
 
         // The certification checklist always shows the whole history so games
         // can be certified regardless of the stats filter.
@@ -348,12 +377,19 @@ public partial class StatisticsViewModel : ViewModelBase
 
     private void ClearStats()
     {
-        TotalGames = Wins = Losses = NoResult = CertifiedGames = 0;
+        TotalGames = Wins = Losses = NoResult = CertifiedGames = DesyncGames = 0;
         WinRateLabel = "—";
+        ApmLabel = "—";
+        FormLabel = "";
+        TeamSizeLabel = "—";
+        ChannelLabel = "—";
+        AverageDurationLabel = "—";
+        CertificationLabel = "—";
         SummaryLabel = "Sign in to see your statistics.";
         RaceRows.Clear();
         MatchupRows.Clear();
         TopOpponents.Clear();
+        MapRows.Clear();
         CertRows.Clear();
         _matches = [];
     }

@@ -1126,8 +1126,10 @@ public class CoreTests
 
     // ---- Statistics --------------------------------------------------------
 
+    private static int _statMatchSeq;
+
     private static OnlineMatch StatMatch(string uuid, int? winnerTeam, params OnlinePlayer[] players) => new(
-        uuid, DateTimeOffset.UtcNow.AddMinutes(-players.Length), "Map", TimeSpan.FromMinutes(5),
+        uuid, DateTimeOffset.UtcNow.AddMinutes(-Interlocked.Increment(ref _statMatchSeq)), "Map", TimeSpan.FromMinutes(5),
         "daf2a27", "Prerelease", players, "uploader", "file-" + uuid, WinnerTeam: winnerTeam);
 
     [Fact]
@@ -1181,7 +1183,114 @@ public class CoreTests
         Assert.Equal(2, top[0].Wins);
         Assert.Equal(1, top[0].Losses);
         Assert.Equal("second", top[1].Name);
-        Assert.Contains("Zerg vs Terran", top[0].TopMatchup);
+        Assert.Equal("Zerg vs Terran", top[0].Matchups[0].Label);
+        Assert.Contains("Zerg vs Terran", top[0].MatchupSummary);
+    }
+
+    [Fact]
+    public void Statistics_top_opponents_is_capped_at_twenty_five()
+    {
+        var matches = Enumerable.Range(0, 26)
+            .Select(i => StatMatch($"m{i}", 0,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer($"opponent-{i}", "Terran", "Human", 100, 1)))
+            .ToArray();
+
+        var stats = StatisticsService.Compute(matches, "me", new HashSet<string>());
+
+        Assert.Equal(StatisticsService.TopOpponentCount, stats.TopOpponents.Count);
+        Assert.Equal(26, stats.TotalGames);
+    }
+
+    [Fact]
+    public void Statistics_opponents_keep_top_five_matchups()
+    {
+        var matches = new[]
+        {
+            StatMatch("m1", 0, new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("rival", "Terran", "Human", 100, 1)),
+            StatMatch("m2", 0, new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("rival", "Terran", "Human", 100, 1)),
+            StatMatch("m3", 0, new OnlinePlayer("me", "Protoss", "Human", 100, 0),
+                new OnlinePlayer("rival", "Terran", "Human", 100, 1)),
+            StatMatch("m4", 0, new OnlinePlayer("me", "Protoss", "Human", 100, 0),
+                new OnlinePlayer("rival", "Zerg", "Human", 100, 1)),
+            StatMatch("m5", 0, new OnlinePlayer("me", "Askosi", "Human", 100, 0),
+                new OnlinePlayer("rival", "Zerg", "Human", 100, 1)),
+            StatMatch("m6", 0, new OnlinePlayer("me", "Askosi", "Human", 100, 0),
+                new OnlinePlayer("rival", "Protoss", "Human", 100, 1)),
+        };
+
+        var stats = StatisticsService.Compute(matches, "me", new HashSet<string>());
+        var rival = stats.TopOpponents.Single();
+
+        Assert.Equal(6, rival.Games);
+        Assert.Equal(5, rival.Matchups.Count);
+        Assert.Equal("Zerg vs Terran", rival.Matchups[0].Label);
+        Assert.Equal(2, rival.Matchups[0].Games);
+    }
+
+    [Fact]
+    public void Statistics_race_profile_lists_random_and_desyncs()
+    {
+        var matches = new[]
+        {
+            StatMatch("m1", 0,
+                new OnlinePlayer("me", "Random", "Human", 100, 0),
+                new OnlinePlayer("opp", "Terran", "Human", 100, 1)),
+            StatMatch("m2", 0,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("opp", "Terran", "Human", 100, 1)),
+            StatMatch("m3", 0,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("opp", "Terran", "Human", 100, 1)),
+        };
+        var desynced = new OnlineMatch(
+            "desync", DateTimeOffset.UtcNow, "Map", TimeSpan.FromMinutes(5), "daf2a27", "Prerelease",
+            [
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("opp", "Terran", "Human", 100, 1),
+            ],
+            "uploader", "file", HasDesync: true, WinnerTeam: 0);
+
+        var stats = StatisticsService.Compute(matches.Append(desynced), "me", new HashSet<string>());
+
+        Assert.Equal(1, stats.DesyncGames);
+        Assert.Equal(3, stats.Races.Single(r => r.Race == "Zerg").Games);
+        Assert.Equal(1, stats.Races.Single(r => r.Race == "Zerg").Desyncs);
+        Assert.Contains(stats.Races, r => r.Race == "Random");
+        Assert.Equal(1, stats.Races.Single(r => r.Race == "Random").Games);
+        // When nobody randomed, the row still exists at zero.
+        var noRandom = StatisticsService.Compute(
+            matches.Where(m => m.MatchUuid != "m1"), "me", new HashSet<string>());
+        Assert.Equal(0, noRandom.Races.Single(r => r.Race == "Random").Games);
+    }
+
+    [Fact]
+    public void Statistics_profile_tracks_maps_form_and_team_sizes()
+    {
+        var matches = new[]
+        {
+            StatMatch("m1", 0,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("opp", "Terran", "Human", 100, 1)),
+            StatMatch("m2", 1,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("a", "Terran", "Human", 100, 1),
+                new OnlinePlayer("b", "Protoss", "Human", 100, 1)),
+            StatMatch("m3", 0,
+                new OnlinePlayer("me", "Zerg", "Human", 100, 0),
+                new OnlinePlayer("opp", "Terran", "Human", 100, 1)),
+        };
+
+        var stats = StatisticsService.Compute(matches, "me", new HashSet<string>());
+
+        Assert.Equal("W L W", stats.FormLabel);
+        Assert.Equal(2, stats.OneVsOneGames);
+        Assert.Equal(1, stats.TeamGames);
+        Assert.Single(stats.TopMaps);
+        Assert.Equal("Map", stats.TopMaps[0].Map);
+        Assert.Equal(3, stats.TopMaps[0].Games);
     }
 
     [Fact]

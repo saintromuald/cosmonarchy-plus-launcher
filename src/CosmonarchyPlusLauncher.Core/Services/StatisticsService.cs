@@ -3,13 +3,20 @@ using CosmonarchyPlusLauncher.Core.Models;
 namespace CosmonarchyPlusLauncher.Core.Services;
 
 /// <summary>Turns the ReplayKraken match list into per-player statistics:
-/// races played, race-vs-race matchups, results, opponent records, and the
-/// top ten most-played opponents. Purely functional — no I/O — so the same
-/// code serves the UI today and the server aggregation later.</summary>
+/// races played, race-vs-race matchups, results, desyncs, opponent records,
+/// and the top twenty-five most-played opponents with their top matchups.
+/// Purely functional — no I/O — so the same code serves the UI today and the
+/// server aggregation later.</summary>
 public static class StatisticsService
 {
     /// <summary>Team index ReplayKraken uses when the winner was not recorded.</summary>
     public const int UnknownWinnerTeam = 4;
+
+    /// <summary>How many opponents make the top-opponents list.</summary>
+    public const int TopOpponentCount = 25;
+
+    /// <summary>How many race matchups are kept per opponent.</summary>
+    public const int MatchupsPerOpponent = 5;
 
     /// <summary>Matches the claimed name appears in (player slot or uploader),
     /// case-insensitive.</summary>
@@ -28,19 +35,23 @@ public static class StatisticsService
 
     /// <summary>Full profile for the claimed name. <paramref name="certified"/>
     /// holds the account's certified match UUIDs; the filter selects which
-    /// slice of the history feeds the numbers.</summary>
+    /// slice of the history feeds the numbers. Certification coverage is
+    /// always measured against the whole history, not the slice.</summary>
     public static PlayerStats Compute(
         IEnumerable<OnlineMatch> matches,
         string playerName,
         IReadOnlySet<string> certified,
         CertificationFilter filter = CertificationFilter.All)
     {
-        var entries = BuildEntries(matches, playerName, certified, filter);
-        return Aggregate(entries);
+        var allEntries = BuildEntries(matches, playerName, certified, CertificationFilter.All);
+        var entries = filter == CertificationFilter.All
+            ? allEntries
+            : allEntries.Where(e => e.Certified == (filter == CertificationFilter.Certified)).ToList();
+        return Aggregate(entries, allEntries);
     }
 
     /// <summary>One row per match the claimed name appears in, with the
-    /// account's team, race, result and the human opponents faced.</summary>
+    /// account's team, race, APM, result and the human opponents faced.</summary>
     public static IReadOnlyList<PlayerMatchEntry> BuildEntries(
         IEnumerable<OnlineMatch> matches,
         string playerName,
@@ -70,6 +81,7 @@ public static class StatisticsService
             // no single team to score, so the game counts but has no result.
             var myTeams = mine.Select(p => p.Team).Distinct().ToList();
             var myRace = mine.FirstOrDefault()?.Race ?? "";
+            var myApm = mine.Select(p => p.Apm).FirstOrDefault(a => a is not null);
             var outcome = myTeams.Count == 1
                 ? MatchOutcome(myTeams[0], match.WinnerTeam)
                 : MatchResult.NoResult;
@@ -87,6 +99,7 @@ public static class StatisticsService
                 myRace,
                 outcome,
                 isCertified,
+                myApm,
                 opponents));
         }
 
@@ -103,35 +116,52 @@ public static class StatisticsService
         return winnerTeam == team ? MatchResult.Win : MatchResult.Loss;
     }
 
-    /// <summary>Aggregates entries into the profile: races, matchups, opponents.</summary>
-    public static PlayerStats Aggregate(IReadOnlyList<PlayerMatchEntry> entries)
+    /// <summary>Aggregates the (filtered) entries into the profile and keeps
+    /// <paramref name="allEntries"/> for whole-history figures such as
+    /// certification coverage.</summary>
+    public static PlayerStats Aggregate(
+        IReadOnlyList<PlayerMatchEntry> entries, IReadOnlyList<PlayerMatchEntry>? allEntries = null)
     {
+        allEntries ??= entries;
         if (entries.Count == 0)
-            return PlayerStats.Empty;
+            return PlayerStats.Empty with
+            {
+                TotalHistoryGames = allEntries.Count,
+                TotalCertifiedGames = allEntries.Count(e => e.Certified),
+            };
 
         var wins = entries.Count(e => e.Result == MatchResult.Win);
         var losses = entries.Count(e => e.Result == MatchResult.Loss);
         var noResult = entries.Count - wins - losses;
         var certified = entries.Count(e => e.Certified);
+        var desyncs = entries.Count(e => e.Match.HasDesync);
 
-        var races = entries
+        // Race profile: every race picked, with records and desync counts.
+        // "Random" is always listed — replays usually record the resolved
+        // race, so it will often be zero, but the row answers the question.
+        var raceGroups = entries
             .GroupBy(e => NonEmpty(e.MyRace), StringComparer.OrdinalIgnoreCase)
-            .Select(g => new RaceStats(
-                g.Key,
-                g.Count(),
-                g.Count(e => e.Result == MatchResult.Win),
-                g.Count(e => e.Result == MatchResult.Loss)))
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+        var races = raceGroups
+            .Select(kv => new RaceStats(
+                kv.Key,
+                kv.Value.Count,
+                kv.Value.Count(e => e.Result == MatchResult.Win),
+                kv.Value.Count(e => e.Result == MatchResult.Loss),
+                kv.Value.Count(e => e.Match.HasDesync)))
             .OrderByDescending(r => r.Games)
             .ToList();
+        if (!raceGroups.ContainsKey("Random"))
+            races.Add(new RaceStats("Random", 0, 0, 0, 0));
 
+        // Race-vs-race matchups.
         var matchupGames = new Dictionary<string, (int Games, int Wins, int Losses)>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in entries)
         {
             var myRace = NonEmpty(entry.MyRace);
             foreach (var opponent in entry.Opponents)
             {
-                var oppRace = NonEmpty(opponent.Race);
-                var key = $"{myRace}\u0000{oppRace}";
+                var key = $"{myRace}\u0000{NonEmpty(opponent.Race)}";
                 matchupGames.TryGetValue(key, out var cell);
                 cell.Games++;
                 if (entry.Result == MatchResult.Win)
@@ -149,9 +179,8 @@ public static class StatisticsService
             .OrderByDescending(m => m.Games)
             .ToList();
 
-        // Opponent records: total games against each name and the matchup
-        // they played most often.
-        var perOpponent = new Dictionary<string, (int Games, int Wins, int Losses, Dictionary<string, int> Matchups)>(
+        // Opponent records with per-opponent matchup lists.
+        var perOpponent = new Dictionary<string, (int Games, int Wins, int Losses, Dictionary<string, (int Games, int Wins, int Losses)> Matchups)>(
             StringComparer.OrdinalIgnoreCase);
         foreach (var entry in entries)
         {
@@ -160,15 +189,20 @@ public static class StatisticsService
             {
                 var key = opponent.Name;
                 perOpponent.TryGetValue(key, out var rec);
-                rec.Matchups ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                rec.Matchups ??= new Dictionary<string, (int, int, int)>(StringComparer.OrdinalIgnoreCase);
                 rec.Games++;
                 if (entry.Result == MatchResult.Win)
                     rec.Wins++;
                 else if (entry.Result == MatchResult.Loss)
                     rec.Losses++;
-                var matchupKey = $"{myRace} vs {NonEmpty(opponent.Race)}";
-                rec.Matchups.TryGetValue(matchupKey, out var mGames);
-                rec.Matchups[matchupKey] = mGames + 1;
+                var matchupKey = $"{myRace}\u0000{NonEmpty(opponent.Race)}";
+                rec.Matchups.TryGetValue(matchupKey, out var cell);
+                cell.Games++;
+                if (entry.Result == MatchResult.Win)
+                    cell.Wins++;
+                else if (entry.Result == MatchResult.Loss)
+                    cell.Losses++;
+                rec.Matchups[matchupKey] = cell;
                 perOpponent[key] = rec;
             }
         }
@@ -178,11 +212,52 @@ public static class StatisticsService
                 kv.Value.Games,
                 kv.Value.Wins,
                 kv.Value.Losses,
-                kv.Value.Matchups.OrderByDescending(m => m.Value).FirstOrDefault().Key ?? "—"))
+                kv.Value.Matchups
+                    .Select(m => new MatchupStats(
+                        m.Key.Split('\u0000')[0],
+                        m.Key.Split('\u0000')[1],
+                        m.Value.Games, m.Value.Wins, m.Value.Losses))
+                    .OrderByDescending(m => m.Games)
+                    .Take(MatchupsPerOpponent)
+                    .ToList()))
             .OrderByDescending(o => o.Games)
             .ThenByDescending(o => o.Wins)
             .ThenBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        // Maps.
+        var maps = entries
+            .GroupBy(e => NonEmpty(e.Match.MapName), StringComparer.OrdinalIgnoreCase)
+            .Select(g => new MapStats(
+                g.Key,
+                g.Count(),
+                g.Count(e => e.Result == MatchResult.Win),
+                g.Count(e => e.Result == MatchResult.Loss)))
+            .OrderByDescending(m => m.Games)
+            .Take(8)
+            .ToList();
+
+        // APM averages (only entries that recorded one).
+        double? Average(IEnumerable<PlayerMatchEntry> source) =>
+            source.Select(e => e.Apm).Where(a => a is not null).Select(a => a!.Value).ToArray() is { Length: > 0 } values
+                ? values.Average()
+                : null;
+
+        // Recent form: last ten results, newest first.
+        var form = string.Join(" ", entries.Take(10).Select(e => e.Result switch
+        {
+            MatchResult.Win => "W",
+            MatchResult.Loss => "L",
+            _ => "–",
+        }));
+
+        var oneVsOne = entries.Count(e => e.Opponents.Count == 1);
+        var plus = entries.Count(e => ReplayBuildResolver.IsPrerelease(e.Match.GameVersionKind));
+
+        var durations = entries.Where(e => e.Match.Duration > TimeSpan.Zero).Select(e => e.Match.Duration).ToArray();
+        var averageDuration = durations.Length > 0
+            ? TimeSpan.FromSeconds(durations.Average(d => d.TotalSeconds))
+            : (TimeSpan?)null;
 
         return new PlayerStats(
             entries.Count,
@@ -192,10 +267,23 @@ public static class StatisticsService
             certified,
             races,
             matchups,
-            opponents.Take(10).ToList(),
-            entries.Take(200).ToList());
+            opponents.Take(TopOpponentCount).ToList(),
+            entries.Take(200).ToList(),
+            maps,
+            Average(entries),
+            Average(entries.Where(e => e.Result == MatchResult.Win)),
+            Average(entries.Where(e => e.Result == MatchResult.Loss)),
+            form,
+            oneVsOne,
+            entries.Count - oneVsOne,
+            plus,
+            entries.Count - plus,
+            averageDuration,
+            allEntries.Count,
+            allEntries.Count(e => e.Certified),
+            desyncs);
     }
 
-    private static string NonEmpty(string race) =>
-        string.IsNullOrWhiteSpace(race) ? "Unknown" : race;
+    private static string NonEmpty(string value) =>
+        string.IsNullOrWhiteSpace(value) ? "Unknown" : value;
 }
