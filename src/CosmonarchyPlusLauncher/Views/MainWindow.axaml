@@ -32,6 +32,9 @@
         <TabItem Header="Statistics">
             <views:StatisticsPage />
         </TabItem>
+        <TabItem Header="Statistics Plus">
+            <views:StatisticsPlusPage />
+        </TabItem>
         <TabItem Header="Replays">
             <views:ReplaysPage />
         </TabItem>

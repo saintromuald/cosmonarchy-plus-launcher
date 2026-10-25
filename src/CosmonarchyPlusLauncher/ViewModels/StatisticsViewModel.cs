@@ -117,15 +117,21 @@ public partial class StatisticsViewModel : ViewModelBase
 {
     private readonly LocalAccountBackend _backend = (LocalAccountBackend)AppRuntime.AccountBackend;
     private readonly ReplayKrakenService _kraken = new();
+    private readonly ChannelFilter _fixedChannel;
     private IReadOnlyList<OnlineMatch> _matches = [];
 
-    public StatisticsViewModel()
+    public StatisticsViewModel(ChannelFilter fixedChannel = ChannelFilter.All)
     {
-        _selectedChannel = Channels[0];
+        _fixedChannel = fixedChannel;
+        _selectedChannel = Channels.First(c => c.Value == fixedChannel);
         AppRuntime.LocalAccountChanged += OnAccountChanged;
         AppRuntime.CertificationsChanged += OnCertificationsChanged;
         UpdateAccountState();
     }
+
+    /// <summary>False on the dedicated Statistics Plus tab, where the tab
+    /// itself is the channel; the selector hides.</summary>
+    public bool CanSelectChannel => _fixedChannel == ChannelFilter.All;
 
     // ---- Account (login / register) ---------------------------------------
 

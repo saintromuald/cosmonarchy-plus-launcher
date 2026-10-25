@@ -74,6 +74,7 @@
                 <Button Grid.Column="0" Content="Sync now" Command="{Binding SyncNowCommand}"
                         IsEnabled="{Binding !SyncBusy}" />
                 <ComboBox Grid.Column="1" Margin="8,0,0,0" Width="150"
+                          IsVisible="{Binding CanSelectChannel}"
                           ItemsSource="{Binding Channels}" SelectedItem="{Binding SelectedChannel}">
                     <ComboBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:ChannelOption">
