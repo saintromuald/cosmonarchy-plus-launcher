@@ -137,13 +137,20 @@
                 </TabItem>
 
                 <TabItem Header="Opponents">
-                    <Grid RowDefinitions="Auto,*">
+                    <Grid>
+                        <!-- List view -->
+                        <Grid RowDefinitions="Auto,Auto,*" IsVisible="{Binding !IsOpponentDetailOpen}">
                         <TextBlock Grid.Row="0" Text="Top 25 opponents — with your top 5 race matchups against each"
                                    FontWeight="SemiBold" />
-                        <ListBox Grid.Row="1" Margin="0,4,0,0" ItemsSource="{Binding TopOpponents}">
+                        <TextBlock Grid.Row="1" Text="Double-click an opponent to open every game between you."
+                                   TextWrapping="Wrap" Margin="0,2,0,4"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        <ListBox Grid.Row="2" ItemsSource="{Binding TopOpponents}"
+                                 SelectedItem="{Binding SelectedOpponent}">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:OpponentRow">
-                                    <Grid RowDefinitions="Auto,Auto" Margin="0,2,0,4">
+                                    <Grid RowDefinitions="Auto,Auto" Margin="0,2,0,4"
+                                          DoubleTapped="OnOpponentDoubleTapped" Background="Transparent">
                                         <Grid Grid.Row="0" ColumnDefinitions="30,*,44,44,44,60">
                                             <TextBlock Grid.Column="0" Text="{Binding RankLabel}" />
                                             <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold"
@@ -160,6 +167,39 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
+                    </Grid>
+
+                    <!-- Head-to-head history -->
+                    <Grid RowDefinitions="Auto,Auto,Auto,*" IsVisible="{Binding IsOpponentDetailOpen}">
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8">
+                            <Button Content="← Back" Command="{Binding CloseOpponentCommand}" />
+                            <TextBlock Text="{Binding OpponentDetailHeader}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Grid.Row="1" Text="{Binding OpponentDetailSummary}"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" Margin="0,4,0,0" />
+                        <Grid Grid.Row="2" ColumnDefinitions="110,70,50,*,60,40" Margin="6,8,0,0">
+                            <TextBlock Grid.Column="0" Text="When" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="1" Text="Matchup" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="2" Text="Result" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="3" Text="Map" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="4" Text="Length" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="5" Text="" />
+                        </Grid>
+                        <ListBox Grid.Row="3" Margin="0,4,0,0" ItemsSource="{Binding OpponentMatches}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:OpponentMatchRow">
+                                    <Grid ColumnDefinitions="110,70,50,*,60,40">
+                                        <TextBlock Grid.Column="0" Text="{Binding DateLabel}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding MatchupLabel}" />
+                                        <TextBlock Grid.Column="2" Text="{Binding ResultLabel}" />
+                                        <TextBlock Grid.Column="3" Text="{Binding MapLabel}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="4" Text="{Binding DurationLabel}" />
+                                        <TextBlock Grid.Column="5" Text="{Binding Badges}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
                     </Grid>
                 </TabItem>
 

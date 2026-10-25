@@ -33,6 +33,22 @@ public static class StatisticsService
             .ToList();
     }
 
+    /// <summary>Every match the claimed name played against one opponent,
+    /// newest first — the head-to-head history behind the Opponents tab.
+    /// Only games where both names appear are included.</summary>
+    public static IReadOnlyList<PlayerMatchEntry> HeadToHead(
+        IEnumerable<OnlineMatch> matches,
+        string playerName,
+        string opponentName,
+        IReadOnlySet<string> certified)
+    {
+        var entries = BuildEntries(matches, playerName, certified, CertificationFilter.All);
+        return entries
+            .Where(e => e.Opponents.Any(o =>
+                o.Name.Equals(opponentName, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
     /// <summary>Full profile for the claimed name. <paramref name="certified"/>
     /// holds the account's certified match UUIDs; the filter selects which
     /// slice of the history feeds the numbers. Certification coverage is
