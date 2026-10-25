@@ -869,6 +869,46 @@ public class CoreTests
     }
 
     [Fact]
+    public void InstallService_staging_never_arms_plus_without_an_explicit_role()
+    {
+        var settings = new AppSettings();
+        var plus = new GameVersion { RepoId = "release" };
+
+        // Normal play: Plus stages its plugins but stays unarmed (Solo).
+        Assert.Equal((Variant.Plus, NetcodeRole.Solo), InstallService.StagingFor(settings, plus));
+        Assert.Equal(NetcodeRole.Solo, settings.PlusRole);
+
+        // Only an explicit Host/Guest pick arms the rollback turn system.
+        settings.PlusRole = NetcodeRole.Host;
+        Assert.Equal((Variant.Plus, NetcodeRole.Host), InstallService.StagingFor(settings, plus));
+
+        // Netcode defaults to Host; Solo is not a netcode mode.
+        var net = new GameVersion { RepoId = "release", Variant = Variant.Netcode };
+        Assert.Equal((Variant.Netcode, NetcodeRole.Host), InstallService.StagingFor(settings, net));
+        settings.NetcodeRole = NetcodeRole.Guest;
+        Assert.Equal((Variant.Netcode, NetcodeRole.Guest), InstallService.StagingFor(settings, net));
+
+        // Original never stages a plugin.
+        var original = new GameVersion { RepoId = "release-upstream" };
+        Assert.Equal((Variant.Original, (NetcodeRole?)null), InstallService.StagingFor(settings, original));
+
+        // The per-family roles round-trip through the settings file.
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-roles-{Guid.NewGuid():N}.json");
+        try
+        {
+            settings.FilePath = path;
+            settings.Save();
+            var loaded = AppSettings.Load(path);
+            Assert.Equal(NetcodeRole.Host, loaded.PlusRole);
+            Assert.Equal(NetcodeRole.Guest, loaded.NetcodeRole);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void RepoCatalog_finds_plugins_and_keeps_their_qdp_names()
     {
         var plus = RepoCatalog.Find("plus");

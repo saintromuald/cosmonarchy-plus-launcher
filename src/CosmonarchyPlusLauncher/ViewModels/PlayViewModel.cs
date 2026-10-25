@@ -29,11 +29,12 @@ public partial class PlayViewModel : ViewModelBase
 
     public IReadOnlyList<Variant> Variants { get; } = [Variant.Original, Variant.Plus, Variant.Netcode];
 
-    /// <summary>Plus has the unarmed "solo" mode; netcode is turn-based and
-    /// only has host/guest slots, and Original stages no plugin at all.</summary>
+    /// <summary>Plus has the unarmed "solo" mode first (it is the mode that
+    /// works for normal play); netcode is turn-based and only has host/guest
+    /// slots, and Original stages no plugin at all.</summary>
     public IReadOnlyList<NetcodeRole> Roles => Variant == Variant.Netcode
         ? [NetcodeRole.Host, NetcodeRole.Guest]
-        : [NetcodeRole.Host, NetcodeRole.Guest, NetcodeRole.Solo];
+        : [NetcodeRole.Solo, NetcodeRole.Host, NetcodeRole.Guest];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanInstall))]
@@ -69,10 +70,14 @@ public partial class PlayViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(InstalledHeading))]
     [NotifyPropertyChangedFor(nameof(EmptyHint))]
     [NotifyPropertyChangedFor(nameof(VariantHint))]
+    [NotifyPropertyChangedFor(nameof(RoleWarning))]
+    [NotifyPropertyChangedFor(nameof(RoleWarningVisible))]
     private Variant _variant = AppRuntime.Settings.Variant;
 
     [ObservableProperty]
-    private NetcodeRole? _role = AppRuntime.Settings.NetcodeRole ?? NetcodeRole.Solo;
+    [NotifyPropertyChangedFor(nameof(RoleWarning))]
+    [NotifyPropertyChangedFor(nameof(RoleWarningVisible))]
+    private NetcodeRole? _role;
 
     [ObservableProperty]
     private bool _showUnofficial;
@@ -111,6 +116,7 @@ public partial class PlayViewModel : ViewModelBase
 
     private string? _pendingDeleteId;
     private int _loadToken;
+    private bool _suppressRoleSave;
 
     /// <summary>The repository last picked in each variant family, so
     /// switching the filter back restores that choice instead of jumping to
@@ -149,6 +155,17 @@ public partial class PlayViewModel : ViewModelBase
         _ => "The rollback plugin staged on the Plus-enabled builds. Pick a build and a role to play.",
     };
 
+    /// <summary>Warn when the chosen role arms the rollback turn system: it
+    /// takes over mouse and keyboard input while it is under development, so
+    /// normal play must use Solo (Plus) or avoid launching Netcode builds.</summary>
+    public string RoleWarning => Variant == Variant.Plus && Role is not null and not NetcodeRole.Solo
+        ? "Warning: Host/Guest arms the rollback turn system, which takes over the mouse and keyboard (netcode testing only). Choose Solo for normal play."
+        : Variant == Variant.Netcode
+            ? "Warning: Netcode builds run armed — the turn system takes over the mouse and keyboard. Close the game to end the session."
+            : "";
+
+    public bool RoleWarningVisible => RoleWarning.Length > 0;
+
     /// <summary>What the currently selected repository installs, shown under
     /// the repository picker.</summary>
     public string RepoHint => SelectedRepo is null
@@ -164,6 +181,9 @@ public partial class PlayViewModel : ViewModelBase
         RemasteredVisible = RemasteredAccess.IsUnlocked(_settings);
         ShowRemasteredUnlock = !RemasteredVisible;
         _repoByVariant[Variant] = _settings.SelectedRepoId;
+        _role = Variant == Variant.Netcode
+            ? _settings.NetcodeRole ?? NetcodeRole.Host
+            : _settings.PlusRole;
         RebuildRepos();
         SelectedRepo = Repos.FirstOrDefault(r => r.Id == _settings.SelectedRepoId) ?? Repos.FirstOrDefault();
         ReloadInstalled();
@@ -181,10 +201,16 @@ public partial class PlayViewModel : ViewModelBase
     {
         _settings.Variant = value;
         _settings.Save();
-        // Netcode has no solo mode; leaving "Solo" selected would arm slot 0.
-        if (value == Variant.Netcode && Role == NetcodeRole.Solo)
-            Role = NetcodeRole.Host;
+        // Each family keeps its own role: switching filters must not arm the
+        // rollback turn system on a Plus play just because Netcode was viewed.
+        _suppressRoleSave = true;
+        Role = value == Variant.Netcode
+            ? _settings.NetcodeRole ?? NetcodeRole.Host
+            : _settings.PlusRole;
+        _suppressRoleSave = false;
         OnPropertyChanged(nameof(Roles));
+        OnPropertyChanged(nameof(RoleWarning));
+        OnPropertyChanged(nameof(RoleWarningVisible));
         RebuildRepos();
         ReloadInstalled();
         LoadSources(announce: false);
@@ -193,7 +219,12 @@ public partial class PlayViewModel : ViewModelBase
 
     partial void OnRoleChanged(NetcodeRole? value)
     {
-        _settings.NetcodeRole = value;
+        if (_suppressRoleSave)
+            return;
+        if (Variant == Variant.Netcode)
+            _settings.NetcodeRole = value;
+        else
+            _settings.PlusRole = value ?? NetcodeRole.Solo;
         _settings.Save();
     }
 
@@ -434,11 +465,12 @@ public partial class PlayViewModel : ViewModelBase
     {
         if (SelectedInstall?.Version is not { } version)
             return;
-        if (Variant != Variant.Original)
-        {
-            _settings.NetcodeRole = Role; // persist the effective role
-            _settings.Save();
-        }
+        // Persist the effective role for this family so a restart keeps it.
+        if (Variant == Variant.Netcode)
+            _settings.NetcodeRole = Role;
+        else if (Variant == Variant.Plus)
+            _settings.PlusRole = Role ?? NetcodeRole.Solo;
+        _settings.Save();
         await RunAsync("play", (progress, ct) => _versions.PlayAsync(version, progress, ct: ct));
         ReloadInstalled();
     }
