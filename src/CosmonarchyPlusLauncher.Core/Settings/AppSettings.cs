@@ -35,6 +35,13 @@ public sealed class AppSettings
 
     public bool ShowUnofficialRepos { get; set; }
 
+    /// <summary>Base URL of the self-hosted Plus replay server (the
+    /// replay-kraken fork), e.g. "https://replays.example.org". Empty = Plus
+    /// games are found by SHA-splitting the official ReplayKraken list, as
+    /// before the split. Played Plus games upload to the server configured
+    /// in the game's cosmonarchy.yml (replay-kraken-server).</summary>
+    public string PlusReplayServer { get; set; } = "";
+
     public Variant Variant { get; set; } = Variant.Original;
 
     /// <summary>Netcode role for Netcode launches (Host/guest only; the armed

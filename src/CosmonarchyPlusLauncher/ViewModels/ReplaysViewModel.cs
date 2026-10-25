@@ -1013,7 +1013,34 @@ public partial class ReplaysViewModel : ViewModelBase
                     ? plusPrerelease
                     : plusRelease;
                 var isPlus = shas.Any(s => s.StartsWith(match.GameVersion, StringComparison.OrdinalIgnoreCase));
-                (isPlus ? plus : og).Add(match);
+                if (isPlus)
+                    plus.Add(match with { Channel = ReplayChannel.Plus });
+                else
+                    og.Add(match);
+            }
+
+            // A configured Plus server is authoritative for the Plus channel:
+            // its list merges over the SHA-split remnant of the official one
+            // (games uploaded before the split still live there).
+            var plusServer = _settings.PlusReplayServer.Trim();
+            if (plusServer.Length > 0)
+            {
+                var plusProgress = new Progress<string>(s => PlusStatus = s);
+                var plusKraken = new ReplayKrakenService(apiBase: plusServer);
+                try
+                {
+                    var plusOnline = await plusKraken.GetPlusMatchesAsync(
+                        force, plusProgress, CancellationToken.None);
+                    var byUuid = plus.ToDictionary(m => m.MatchUuid, StringComparer.OrdinalIgnoreCase);
+                    foreach (var m in plusOnline)
+                        byUuid[m.MatchUuid] = m; // the server copy wins
+                    plus = byUuid.Values.OrderByDescending(m => m.UploadedAt).ToList();
+                }
+                catch (Exception ex)
+                {
+                    PlusStatus = $"Could not load the Plus server list ({ex.Message}); " +
+                                 "using the official list's Plus games.";
+                }
             }
             _ogAll = og;
             _plusAll = plus;

@@ -34,6 +34,11 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _discordWebhookUrl = AppRuntime.Settings.DiscordWebhookUrl ?? "";
 
+    /// <summary>Base URL of the self-hosted Plus replay server (empty = Plus
+    /// games come from the official ReplayKraken list).</summary>
+    [ObservableProperty]
+    private string _plusReplayServer = AppRuntime.Settings.PlusReplayServer;
+
     /// <summary>Unlock fields for the hidden Remastered launch.</summary>
     [ObservableProperty]
     private string _remasteredPassword = "";
@@ -108,6 +113,9 @@ public partial class SettingsViewModel : ViewModelBase
         _settings.DiscordWebhookUrl = string.IsNullOrWhiteSpace(DiscordWebhookUrl)
             ? null
             : DiscordWebhookUrl.Trim();
+        _settings.PlusReplayServer = string.IsNullOrWhiteSpace(PlusReplayServer)
+            ? ""
+            : PlusReplayServer.Trim();
         _settings.CommunityRepo = CommunityRepo.Trim();
         _settings.RemasteredChannel = RemasteredChannel;
         _settings.RemasteredBundleUrl = string.IsNullOrWhiteSpace(RemasteredBundleUrl)
@@ -128,6 +136,7 @@ public partial class SettingsViewModel : ViewModelBase
         ActionOnPlay = ActionOnPlay.StayOpen;
         FullVersionLog = false;
         DiscordWebhookUrl = "";
+        PlusReplayServer = "";
         CommunityRepo = "saintromuald/cosmonarchy-shares";
         GithubToken = "";
         Status = "Defaults restored — press Save to keep them.";

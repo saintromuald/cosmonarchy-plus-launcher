@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using CosmonarchyPlusLauncher.Core.Services;
 
 namespace CosmonarchyPlusLauncher.Core.Models;
 
@@ -24,6 +25,18 @@ public sealed record OnlineMatch(
     bool HasDesync = false,
     int? WinnerTeam = null)
 {
+    /// <summary>Which channel the match belongs to. Matches from the
+    /// self-hosted Plus server are always <see cref="ReplayChannel.Plus"/>;
+    /// matches from the official list start as Original (the Replays tab
+    /// refines those by SHA against the fork repositories).</summary>
+    [JsonIgnore]
+    public ReplayChannel Channel { get; init; } = ReplayChannel.Original;
+
+    /// <summary>API base the match was listed by. Empty = the official
+    /// ReplayKraken at cosmonarchy.com; replay downloads route through it.</summary>
+    [JsonIgnore]
+    public string ApiBase { get; init; } = "";
+
     /// <summary>"A (Zerg) vs B (Terran)" — team boundaries are not shown.</summary>
     [JsonIgnore]
     public string PlayersLabel => Players.Count == 0

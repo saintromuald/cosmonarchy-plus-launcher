@@ -33,10 +33,12 @@ public static class StatisticsService
             .ToList();
     }
 
-    /// <summary>True when the match was played on a Cosmonarchy Plus
-    /// (Prerelease) build. The original game is everything else, matching the
-    /// classification the Replays tab uses.</summary>
+    /// <summary>True when the match was played on a Cosmonarchy Plus build.
+    /// Matches from the self-hosted Plus server are always Plus; matches from
+    /// the official list fall back to the prerelease kind (the Replays tab
+    /// refines those by SHA against the fork repositories).</summary>
     internal static bool IsPlusChannel(OnlineMatch match) =>
+        match.Channel == ReplayChannel.Plus ||
         ReplayBuildResolver.IsPrerelease(match.GameVersionKind);
 
     /// <summary>True when the named player is the only human in the match —

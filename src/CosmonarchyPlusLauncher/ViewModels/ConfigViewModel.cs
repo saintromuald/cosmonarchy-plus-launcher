@@ -248,9 +248,13 @@ public partial class ConfigViewModel : ViewModelBase
                   - All
                 avoid-mirror-races: true
 
-                # Replay Kraken (self-hosted fork)
-                replay-kraken-server: http://cosmonarchy.com
+                # Replay Kraken upload (self-hosted fork)
+                # Where finished games are uploaded. Empty = no auto-upload.
+                replay-kraken-server: ""
+                # Upload token for the server above. Empty falls back to the
+                # cosmonarchy.com account token.
                 replay-kraken-token: ""
+                # Also upload unranked, non-desynced games.
                 replay-kraken-upload-all: false
 
                 # Launch settings
