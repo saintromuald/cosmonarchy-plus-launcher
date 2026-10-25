@@ -331,6 +331,12 @@ public partial class StatisticsViewModel : ViewModelBase
 
     [ObservableProperty] private CertificationFilter _selectedFilter = CertificationFilter.All;
     [ObservableProperty] private ChannelOption _selectedChannel;
+
+    /// <summary>True hides games where the claimed name is the only human —
+    /// practice games against AI bots. On by default; the checkbox is next to
+    /// the filters.</summary>
+    [ObservableProperty] private bool _hideAiGames = true;
+
     [ObservableProperty] private string _search = "";
     [ObservableProperty] private bool _syncBusy;
 
@@ -377,7 +383,7 @@ public partial class StatisticsViewModel : ViewModelBase
             return;
         var certified = LocalAccountBackend.CertifiedSet(account);
         var entries = StatisticsService.HeadToHead(
-            _matches, account.PlayerName, row.Name, certified, SelectedChannel.Value);
+            _matches, account.PlayerName, row.Name, certified, SelectedChannel.Value, HideAiGames);
 
         OpponentMatches.Clear();
         foreach (var entry in entries)
@@ -405,6 +411,7 @@ public partial class StatisticsViewModel : ViewModelBase
 
     partial void OnSelectedFilterChanged(CertificationFilter value) => Rebuild();
     partial void OnSelectedChannelChanged(ChannelOption? value) => Rebuild();
+    partial void OnHideAiGamesChanged(bool value) => Rebuild();
     partial void OnSearchChanged(string value) => RebuildCertList();
 
     [RelayCommand]
@@ -477,7 +484,7 @@ public partial class StatisticsViewModel : ViewModelBase
 
         var certified = LocalAccountBackend.CertifiedSet(account);
         var stats = StatisticsService.Compute(
-            _matches, account.PlayerName, certified, SelectedFilter, SelectedChannel.Value);
+            _matches, account.PlayerName, certified, SelectedFilter, SelectedChannel.Value, HideAiGames);
 
         TotalGames = stats.TotalGames;
         Wins = stats.Wins;
@@ -492,7 +499,8 @@ public partial class StatisticsViewModel : ViewModelBase
         ChannelLabel = stats.ChannelLabel;
         AverageDurationLabel = stats.AverageDurationLabel;
         CertificationLabel = stats.CertificationLabel;
-        SummaryLabel = $"Statistics for “{account.PlayerName}” — {stats.TotalGames} game(s) shown.";
+        SummaryLabel = $"Statistics for “{account.PlayerName}” — {stats.TotalGames} game(s) shown" +
+                       (HideAiGames ? " · AI games hidden" : "") + ".";
 
         RaceRows.Clear();
         foreach (var race in stats.Races)
@@ -527,7 +535,7 @@ public partial class StatisticsViewModel : ViewModelBase
 
         var certified = LocalAccountBackend.CertifiedSet(account);
         var entries = recent ?? StatisticsService
-            .BuildEntries(_matches, account.PlayerName, certified, CertificationFilter.All, SelectedChannel.Value);
+            .BuildEntries(_matches, account.PlayerName, certified, CertificationFilter.All, SelectedChannel.Value, HideAiGames);
 
         var wanted = Search.Trim();
         if (wanted.Length > 0)
