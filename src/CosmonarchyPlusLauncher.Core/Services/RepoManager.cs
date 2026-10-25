@@ -109,25 +109,35 @@ public sealed class RepoManager : IDisposable
     /// <summary>Throttled git transfer progress: libgit2 reports very often,
     /// so this only forwards a message twice a second or every 256 KiB.
     /// Messages read "Cloning <url>… 128 MB · 2,041 / 4,512 objects" — no
-    /// percentage, because git cannot know the transfer size up front.</summary>
+    /// percentage, because git cannot know the transfer size up front.
+    ///
+    /// The handler must return <c>true</c> to continue: LibGit2Sharp's
+    /// callback contract is "true = keep going, false = cancel". Returning
+    /// false (as this did) made every remote clone abort with
+    /// "indexer progress callback returned -7" — local file clones never call
+    /// the indexer callback, which is why only remote installs broke.</summary>
     private static TransferProgressHandler TransferReporter(IProgress<string>? progress, string label)
     {
         if (progress is null)
-            return _ => false;
+            return _ => true;
         var stopwatch = Stopwatch.StartNew();
         long lastBytes = 0;
+        int lastObjects = -1;
         return t =>
         {
+            if (t.ReceivedBytes == lastBytes && t.ReceivedObjects == lastObjects)
+                return true;
             if (t.ReceivedBytes - lastBytes < 256 * 1024 &&
                 stopwatch.ElapsedMilliseconds < 500)
-                return false;
+                return true;
             stopwatch.Restart();
             lastBytes = t.ReceivedBytes;
+            lastObjects = t.ReceivedObjects;
             var objects = t.TotalObjects > 0
                 ? $"{t.ReceivedObjects:N0} / {t.TotalObjects:N0} objects"
                 : $"{t.ReceivedObjects:N0} objects";
             progress.Report($"{label}… {HttpDownload.FormatBytes(t.ReceivedBytes)} · {objects}");
-            return false;
+            return true;
         };
     }
 
@@ -148,13 +158,21 @@ public sealed class RepoManager : IDisposable
     /// A plain Reset(Hard, "remote/branch") moves whatever branch is currently
     /// checked out, so updating the Release install while its `plus` branch was
     /// checked out used to rewrite `plus` to the mirror's `main` snapshot. This
-    /// checks the intended branch out first, and creates it when missing.</summary>
+    /// checks the intended branch out first, and creates it when missing.
+    ///
+    /// When the remote does not publish the configured branch (an archive that
+    /// renamed it, a mirror that never had it), the checkout keeps its current
+    /// branch instead of failing the install.</summary>
     public void CheckoutBranch(string branch, string remoteName, IProgress<string>? progress = null)
     {
         var repo = Open();
-        var remoteRef = repo.Refs[$"refs/remotes/{remoteName}/{branch}"]
-                        ?? throw new InvalidOperationException(
-                            $"Remote {remoteName} has no branch {branch} in {_dir}");
+        var remoteRef = repo.Refs[$"refs/remotes/{remoteName}/{branch}"];
+        if (remoteRef is null)
+        {
+            progress?.Report(
+                $"Remote {remoteName} has no branch {branch}; keeping the checkout as cloned");
+            return;
+        }
         var commit = repo.Lookup<Commit>(remoteRef.TargetIdentifier)
                      ?? throw new InvalidOperationException($"Cannot resolve {remoteName}/{branch}");
 

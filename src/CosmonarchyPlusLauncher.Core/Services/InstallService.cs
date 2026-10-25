@@ -59,9 +59,7 @@ public sealed class InstallService
     public string GameExe => File.Exists(Path.Combine(RepoDir, "Cosmonarchy.exe"))
         ? Path.Combine(RepoDir, "Cosmonarchy.exe")
         : Path.Combine(RepoDir, "Cosmonarchy BW.exe");
-    public string StageDir => OperatingSystem.IsWindows()
-        ? Path.Combine(InstallRoot, "variants")
-        : Path.Combine(_settings.LinuxPrefixRoot, "variants");
+    public string StageDir => InstallPaths.StageDir(_settings);
 
     /// <summary>Install/update this version: ensure the shared base, then
     /// bring the version's own checkout to its tracked branch tip or its
@@ -77,10 +75,24 @@ public sealed class InstallService
     public async Task PlayAsync(IProgress<string>? progress = null, CancellationToken ct = default)
     {
         await InstallAsync(progress, ct);
+        // The version's own family decides the staging: an Original install
+        // never picks up the Plus plugin just because the Play page's filter
+        // was left on Plus (and a Netcode install always arms rollback).
+        var variant = _version.EffectiveVariant;
+        var role = variant switch
+        {
+            Variant.Original => null,
+            // Rollback only has host (slot 0) and guest (slot 1); Solo is a
+            // Plus concept and must not arm slot 0 as a "solo" netcode game.
+            Variant.Netcode => _settings.NetcodeRole == NetcodeRole.Guest
+                ? NetcodeRole.Guest
+                : NetcodeRole.Host,
+            _ => _settings.NetcodeRole,
+        };
         var stager = new PluginStager(RepoDir, StageDir,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
-        stager.Apply(_settings.Variant, _settings.NetcodeRole);
-        progress?.Report($"Launching {_version.Name}");
+        stager.Apply(variant, role);
+        progress?.Report($"Launching {_version.Name} ({variant})");
         EnsureFullscreenDisplay(progress);
         await LaunchAsync(ct);
     }
@@ -154,8 +166,21 @@ public sealed class InstallService
             if (Directory.Exists(RepoDir))
                 Directory.Delete(RepoDir, recursive: true);
             repo.Clone(progress);
-            if (!_version.TracksBranch)
+            if (_version.TracksBranch)
+            {
+                // A plain clone checks out the remote's default branch. The
+                // catalog builds live on `plus` (Plus mirror), `master`
+                // (archives) or `main`, so installing "Latest" must land on
+                // the entry's branch immediately, not only after the next
+                // update.
+                var branch = string.IsNullOrWhiteSpace(_repo.Branch) ? "main" : _repo.Branch;
+                var remoteName = repo.EnsureRemoteName();
+                repo.CheckoutBranch(branch, remoteName, progress);
+            }
+            else
+            {
                 repo.CheckoutCommit(_version.PinnedSha!, progress);
+            }
         }
         await Task.CompletedTask; // git operations are sync in LibGit2Sharp
     }

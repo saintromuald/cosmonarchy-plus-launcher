@@ -33,10 +33,28 @@ public sealed class GameVersion
     /// <summary>Commit currently checked out (informational).</summary>
     public string? InstalledSha { get; set; }
 
+    /// <summary>The variant this install belongs to (the Original / Plus /
+    /// Netcode filter on the Play page). Null on records written before the
+    /// variants existed: those fall back to the repository's own family.</summary>
+    public Variant? Variant { get; set; }
+
     public bool TracksBranch => string.IsNullOrEmpty(PinnedSha);
 
     [JsonIgnore]
     public RepoEntry? Repo => string.IsNullOrEmpty(RepoId) ? null : RepoCatalog.Find(RepoId);
+
+    /// <summary>The variant used for filtering and for plugin staging.
+    /// Legacy records inherit their repo's family so existing installs land
+    /// in the right group without being rewritten.</summary>
+    [JsonIgnore]
+    public Variant EffectiveVariant =>
+        Variant ?? Repo?.Variant ?? global::CosmonarchyPlusLauncher.Core.Models.Variant.Original;
+
+    [JsonIgnore]
+    public string VariantLabel => EffectiveVariant.ToString();
+
+    [JsonIgnore]
+    public string Badge => EffectiveVariant.ToString().ToUpperInvariant();
 
     /// <summary>One-line description for the versions list.</summary>
     [JsonIgnore]
@@ -48,7 +66,9 @@ public sealed class GameVersion
             var state = TracksBranch
                 ? $"tracks {Repo?.Branch ?? "main"} (auto-updates)"
                 : $"pinned {Short(PinnedSha!)}";
-            var at = string.IsNullOrEmpty(InstalledSha) ? "" : $" · now {Short(InstalledSha)}";
+            var at = string.IsNullOrEmpty(InstalledSha)
+                ? " · not downloaded yet"
+                : $" · now {Short(InstalledSha)}";
             return $"{repo} · {state}{at}";
         }
     }

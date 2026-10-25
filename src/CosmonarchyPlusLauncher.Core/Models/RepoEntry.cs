@@ -21,8 +21,17 @@ public sealed record RepoEntry(
     string? CmbwRootUrl = null,
     string? BuildDir = null,
     bool Unofficial = false,
-    string Branch = "main"
+    string Branch = "main",
+    Variant Variant = global::CosmonarchyPlusLauncher.Core.Models.Variant.Original
 )
 {
     public override string ToString() => Name;
+
+    /// <summary>Short badge text shown next to the name ("ORIGINAL",
+    /// "PLUS", "NETCODE").</summary>
+    public string Badge => Variant.ToString().ToUpperInvariant();
+
+    /// <summary>Older name kept for the plugin staging contract: the .qdp
+    /// file a plugin repo installs.</summary>
+    public string? PluginFileName => Kind == RepoKind.Plugin ? BuildDir : null;
 }

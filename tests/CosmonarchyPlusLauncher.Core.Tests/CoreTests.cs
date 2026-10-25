@@ -114,6 +114,41 @@ public class CoreTests
     }
 
     [Fact]
+    public void CheckoutBranch_missing_remote_branch_keeps_the_checkout()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"cpl-nobranch-{Guid.NewGuid():N}");
+        var remoteDir = Path.Combine(tmp, "remote");
+        var cloneDir = Path.Combine(tmp, "clone");
+        Directory.CreateDirectory(remoteDir);
+        try
+        {
+            Repository.Init(remoteDir);
+            string defaultBranch;
+            using (var seed = new Repository(remoteDir))
+            {
+                var sig = new Signature("t", "t@example.com", DateTimeOffset.UtcNow);
+                File.WriteAllText(Path.Combine(remoteDir, "a.txt"), "a");
+                Commands.Stage(seed, "*");
+                seed.Commit("A", sig, sig);
+                defaultBranch = seed.Head.FriendlyName;
+            }
+
+            Repository.Clone(remoteDir, cloneDir);
+            using var mgr = new RepoManager(cloneDir, remoteDir);
+            // A misconfigured catalog branch must not lose an otherwise
+            // successful clone (archives renamed their branches over time).
+            mgr.CheckoutBranch("plus", "origin");
+
+            using var clone = new Repository(cloneDir);
+            Assert.Equal(defaultBranch, clone.Head.FriendlyName);
+        }
+        finally
+        {
+            Directory.Delete(tmp, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Settings_save_without_a_path_writes_back_to_the_loaded_file()
     {
         var path = Path.Combine(Path.GetTempPath(), $"cpl-test-{Guid.NewGuid():N}.json");
@@ -636,6 +671,66 @@ public class CoreTests
     }
 
     [Fact]
+    public void VersionManager_adopts_the_family_whose_branch_is_checked_out()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"cpl-adopt-variant-{Guid.NewGuid():N}");
+        var src = Path.Combine(tmp, "src");
+        var root = Path.Combine(tmp, "install");
+        try
+        {
+            Directory.CreateDirectory(src);
+            Repository.Init(src);
+            using (var seed = new Repository(src))
+            {
+                var sig = new Signature("t", "t@example.com", DateTimeOffset.UtcNow);
+                File.WriteAllText(Path.Combine(src, "a.txt"), "a");
+                Commands.Stage(seed, "*");
+                seed.Commit("Main build", sig, sig);
+                var defaultBranch = seed.Head.FriendlyName;
+
+                var plus = seed.CreateBranch("plus");
+                Commands.Checkout(seed, plus);
+                File.WriteAllText(Path.Combine(src, "b.txt"), "b");
+                Commands.Stage(seed, "*");
+                seed.Commit("Plus build", sig, sig);
+                Commands.Checkout(seed, seed.Branches[defaultBranch]);
+            }
+
+            Directory.CreateDirectory(root);
+            var checkout = Path.Combine(root, "Release");
+            Repository.Clone(src, checkout);
+            using (var clone = new Repository(checkout))
+            {
+                var plus = clone.CreateBranch("plus", clone.Branches["origin/plus"].Tip);
+                Commands.Checkout(clone, plus);
+            }
+
+            // Both entries point at the same remote: only the checked-out
+            // branch can decide whether this is an Original or Plus build.
+            var baseEntry = new RepoEntry("base", "Base", src, RepoKind.Game,
+                BuildDir: "Release", Branch: "main", Variant: Variant.Original);
+            var plusEntry = new RepoEntry("build-plus", "Plus", src, RepoKind.Game,
+                BuildDir: "Release", Branch: "plus", Variant: Variant.Plus);
+            var settings = new AppSettings
+            {
+                RootPath = root,
+                FilePath = Path.Combine(tmp, "settings.json"),
+            };
+            var manager = new VersionManager(settings);
+
+            Assert.Equal(1, manager.AdoptExistingInstallations(known: [baseEntry, plusEntry]));
+            var adopted = manager.Find("release");
+            Assert.NotNull(adopted);
+            Assert.Equal("build-plus", adopted.RepoId);
+            Assert.Equal(Variant.Plus, adopted.EffectiveVariant);
+        }
+        finally
+        {
+            Directory.Delete(tmp, recursive: true);
+        }
+    }
+
+    [Fact]
     public void VersionManager_create_new_uses_unique_slugs_and_default_names()
     {
         var path = Path.Combine(Path.GetTempPath(), $"cpl-test-{Guid.NewGuid():N}.json");
@@ -709,11 +804,230 @@ public class CoreTests
     {
         var pinned = new GameVersion { Name = "X", RepoId = "release", PinnedSha = "1234567890abcdef" };
         Assert.Contains("pinned 12345678", pinned.Summary);
-        Assert.Contains("Release (My Build)", pinned.Summary);
+        Assert.Contains("Release — Plus (My Build)", pinned.Summary);
 
         var tracked = new GameVersion { Name = "X", RepoId = "release" };
         Assert.Contains("tracks plus", tracked.Summary);
         Assert.Contains("auto-updates", tracked.Summary);
+    }
+
+    [Fact]
+    public void Catalog_separates_variants_and_offers_stable_for_original()
+    {
+        // Original is the vanilla game: upstream stable (release) + prerelease.
+        var original = RepoCatalog.ForVariant(Variant.Original, includeUnofficial: false);
+        Assert.Contains(original, r => r.Id == "release-upstream");
+        Assert.Contains(original, r => r.Id == "prerelease");
+        Assert.All(original, r => Assert.Equal(Variant.Original, r.Variant));
+        Assert.Contains(original, r => r.Name.Contains("Stable", StringComparison.OrdinalIgnoreCase));
+
+        // Plus is the maintainer's plus branch plus the Plus plugin.
+        var plus = RepoCatalog.ForVariant(Variant.Plus, includeUnofficial: false);
+        Assert.Contains(plus, r => r.Id == "release" && r.Branch == "plus");
+        Assert.Contains(plus, r => r.Id == "prerelease-mine" && r.Branch == "plus");
+        Assert.Contains(plus, r => r.Id == "plus" && r.Kind == RepoKind.Plugin);
+        Assert.DoesNotContain(plus, r => r.Id == "release-upstream");
+
+        // Netcode stages the rollback plugin on the plus-capable builds.
+        var netcode = RepoCatalog.ForVariant(Variant.Netcode, includeUnofficial: false);
+        Assert.Contains(netcode, r => r.Id == "rollback" && r.Kind == RepoKind.Plugin);
+        Assert.Contains(netcode, r => r.Id == "release");
+        Assert.DoesNotContain(netcode, r => r.Variant == Variant.Original);
+    }
+
+    [Fact]
+    public void VersionManager_renames_duplicate_display_names_once()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-names-{Guid.NewGuid():N}.json");
+        try
+        {
+            var settings = new AppSettings
+            {
+                RootPath = "/tmp/cosmo",
+                FilePath = path,
+                Versions =
+                [
+                    new GameVersion { Id = "a", Name = "Release — Plus (My Build) — Latest", RepoId = "release" },
+                    new GameVersion { Id = "b", Name = "Release — Plus (My Build) — Latest", RepoId = "release" },
+                    new GameVersion { Id = "c", Name = "release — plus (my build) — latest", RepoId = "release" },
+                ],
+            };
+            var manager = new VersionManager(settings);
+
+            Assert.True(manager.NormalizeDuplicateNames());
+            Assert.Equal("Release — Plus (My Build) — Latest", settings.Versions[0].Name);
+            Assert.Equal("Release — Plus (My Build) — Latest (2)", settings.Versions[1].Name);
+            Assert.EndsWith("(3)", settings.Versions[2].Name);
+
+            // Idempotent: a second launch must not keep appending suffixes.
+            Assert.False(manager.NormalizeDuplicateNames());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void RepoCatalog_finds_plugins_and_keeps_their_qdp_names()
+    {
+        var plus = RepoCatalog.Find("plus");
+        var rollback = RepoCatalog.Find("rollback");
+        Assert.NotNull(plus);
+        Assert.NotNull(rollback);
+        Assert.Equal("zz-cosmo-plus.qdp", plus!.PluginFileName);
+        Assert.Equal("zz-cosmo-rollback.qdp", rollback!.PluginFileName);
+        Assert.Equal(Variant.Plus, plus.Variant);
+        Assert.Equal(Variant.Netcode, rollback.Variant);
+    }
+
+    [Fact]
+    public void GameVersion_variant_falls_back_to_the_repository_family()
+    {
+        var legacy = new GameVersion { Name = "Legacy", RepoId = "release" };
+        Assert.Null(legacy.Variant);
+        Assert.Equal(Variant.Plus, legacy.EffectiveVariant);
+        Assert.Equal("PLUS", legacy.Badge);
+
+        legacy.Variant = Variant.Netcode;
+        Assert.Equal(Variant.Netcode, legacy.EffectiveVariant);
+        Assert.Equal("NETCODE", legacy.Badge);
+    }
+
+    [Fact]
+    public void VersionManager_stamps_the_engine_variant_and_makes_names_unique()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-variant-{Guid.NewGuid():N}.json");
+        try
+        {
+            var entry = RepoCatalog.Find("release")!;
+            var settings = new AppSettings { RootPath = "/tmp/cosmo", FilePath = path };
+            var manager = new VersionManager(settings);
+
+            var netcode = manager.CreateNew(entry, null, null, Variant.Netcode);
+            Assert.Equal(Variant.Netcode, netcode.Variant);
+            Assert.Contains("Netcode", netcode.Name);
+            settings.Versions.Add(netcode);
+
+            var plus = manager.CreateNew(entry, null, null);
+            Assert.Equal(Variant.Plus, plus.Variant);
+            Assert.Contains("Latest", plus.Name);
+            settings.Versions.Add(plus);
+
+            // A second identical default name must not look like the same row.
+            var again = manager.CreateNew(entry, null, null);
+            Assert.NotEqual(plus.Name, again.Name);
+            Assert.EndsWith("(2)", again.Name);
+
+            Assert.DoesNotContain(manager.VersionsFor(Variant.Original), v => v.Id == plus.Id);
+            Assert.Contains(manager.VersionsFor(Variant.Netcode), v => v.Id == netcode.Id);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Settings_round_trips_plugin_records()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-plugins-{Guid.NewGuid():N}.json");
+        try
+        {
+            var settings = new AppSettings
+            {
+                FilePath = path,
+                Plugins =
+                [
+                    new PluginVersion
+                    {
+                        Id = "cosmonarchy-plus-plugin-v0-2-0",
+                        Name = "Cosmonarchy Plus plugin — v0.2.0",
+                        RepoId = "plus",
+                        Variant = Variant.Plus,
+                        Version = "v0.2.0",
+                        Files = [new PluginFile { Name = "zz-cosmo-plus.qdp", Sha256 = "abc", Size = 490496 }],
+                    },
+                ],
+            };
+            settings.Save();
+
+            var loaded = AppSettings.Load(path);
+            var plugin = Assert.Single(loaded.Plugins);
+            Assert.Equal(Variant.Plus, plugin.Variant);
+            Assert.Equal("v0.2.0", plugin.Version);
+            Assert.Equal("zz-cosmo-plus.qdp", Assert.Single(plugin.Files).Name);
+            Assert.Contains("plugin v0.2.0", plugin.Summary);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Plugin_remove_keeps_shared_and_hand_replaced_files()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"cpl-plugin-remove-{Guid.NewGuid():N}");
+        var stage = Path.Combine(tmp, "variants");
+        Directory.CreateDirectory(stage);
+        try
+        {
+            string Hash(string path) =>
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)))
+                    .ToLowerInvariant();
+
+            var plusPath = Path.Combine(stage, "zz-cosmo-plus.qdp");
+            var rollbackPath = Path.Combine(stage, "zz-cosmo-rollback.qdp");
+            File.WriteAllText(plusPath, "plus");
+            File.WriteAllText(rollbackPath, "rollback");
+
+            var plus = new PluginVersion
+            {
+                Id = "plus",
+                Name = "Plus",
+                RepoId = "plus",
+                Variant = Variant.Plus,
+                Version = "v0.2.0",
+                Files =
+                [
+                    new PluginFile { Name = "zz-cosmo-plus.qdp", Sha256 = Hash(plusPath) },
+                    new PluginFile { Name = "zz-cosmo-rollback.qdp", Sha256 = Hash(rollbackPath) },
+                ],
+            };
+            var rollback = new PluginVersion
+            {
+                Id = "rollback",
+                Name = "Rollback",
+                RepoId = "rollback",
+                Variant = Variant.Netcode,
+                Version = "abcd1234",
+                Files = [new PluginFile { Name = "zz-cosmo-rollback.qdp", Sha256 = Hash(rollbackPath) }],
+            };
+            var settings = new AppSettings
+            {
+                RootPath = tmp,
+                LinuxPrefixRoot = tmp,
+                FilePath = Path.Combine(tmp, "settings.json"),
+                Plugins = [plus, rollback],
+            };
+            Assert.Equal(stage, InstallPaths.StageDir(settings));
+
+            // The rollback package shares its qdp with the Plus package.
+            PluginInstallService.Remove(settings, rollback);
+            Assert.True(File.Exists(rollbackPath), "the Plus package still owns the rollback qdp");
+
+            // A hand-built file that replaced the recorded one is left alone.
+            File.WriteAllText(plusPath, "local build");
+            PluginInstallService.Remove(settings, plus);
+            Assert.True(File.Exists(plusPath));
+            Assert.False(File.Exists(rollbackPath));
+            Assert.Empty(settings.Plugins);
+        }
+        finally
+        {
+            Directory.Delete(tmp, recursive: true);
+        }
     }
 
     [Fact]

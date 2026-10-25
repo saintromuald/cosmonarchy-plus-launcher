@@ -99,6 +99,12 @@ public static class AppRuntime
         // versions/*) the first time the new version list is seen.
         Versions.AdoptExistingInstallations();
 
+        // Installs made before the names were de-duplicated look identical in
+        // the list (same repo, same "— Latest"); suffix them once so the new
+        // install is visibly a different entry.
+        if (Versions.NormalizeDuplicateNames())
+            Settings.Save();
+
         // Restore the statistics account that was signed in last time.
         if (AccountBackend is LocalAccountBackend localBackend)
         {

@@ -7,26 +7,34 @@ output used only to enumerate features). The implementation in
 
 ## 1. Repositories
 
-The launcher manages git repositories:
+The launcher manages git repositories, grouped into the three variant families
+the Play page filters on:
 
-| Id | Role | Source |
-| --- | --- | --- |
-| release | Game build (default) | `https://github.com/saintromuald/cosmonarchy-bw-release.git` |
-| prerelease | Game build | `https://gitlab.com/the-no-frauds-club/cosmonarchy-bw-prerelease.git` |
-| release-upstream | Game build fallback | `https://gitlab.com/the-no-frauds-club/cosmonarchy-bw-release.git` |
-| original | Original (pre-split) game build; replay fallback for games the original client recorded without a channel | `https://gitlab.com/the-no-frauds-club/cosmonarchy.git` |
-| old-release | 2023 old release archive (backdate source) | `https://gitlab.com/the-no-frauds-club/release/Cosmonarchy-old-1.git` |
-| nightly | 2023 nightly archive (backdate source) | `https://gitlab.com/Pr0nogo3/specialbus.git` |
-| luci-* | Unofficial mirrors (hidden unless enabled) | gitea.aromavir.us/lucifirius |
-| cmbw-root | Maps | `https://gitlab.com/the-no-frauds-club/cmbw-root.git` |
-| plus | Plugin (staged as `zz-cosmo-plus.qdp`) | `https://github.com/saintromuald/cosmonarchy-plus.git` |
-| rollback | Plugin (staged as `zz-cosmo-rollback.qdp`) | `https://github.com/saintromuald/cosmonarchy-rollback.git` |
+| Id | Family | Role | Source |
+| --- | --- | --- | --- |
+| release-upstream | Original | Stable game build (upstream release; there is no separate stable repo) | `https://gitlab.com/the-no-frauds-club/cosmonarchy-bw-release.git` |
+| prerelease | Original | Prerelease game build | `https://gitlab.com/the-no-frauds-club/cosmonarchy-bw-prerelease.git` |
+| original | Original | Original (pre-split) game build; replay fallback for games the original client recorded without a channel | `https://gitlab.com/the-no-frauds-club/cosmonarchy.git` |
+| old-release | Original | 2023 old release archive (backdate source) | `https://gitlab.com/the-no-frauds-club/release/Cosmonarchy-old-1.git` |
+| nightly | Original | 2023 nightly archive (backdate source) | `https://gitlab.com/Pr0nogo3/specialbus.git` |
+| luci-* | Original | Unofficial mirrors (hidden unless enabled) | gitea.aromavir.us/lucifirius |
+| release | Plus | Plus-enabled game build (the mirror's `plus` branch) | `https://github.com/saintromuald/cosmonarchy-bw-release.git` |
+| prerelease-mine | Plus | Plus-enabled prerelease build (`plus` branch) | `https://github.com/saintromuald/cosmonarchy-bw-prerelease.git` |
+| plus | Plus | Plugin package `zz-cosmo-plus.qdp` (GitHub release zip) | `https://github.com/saintromuald/cosmonarchy-plus.git` |
+| rollback | Netcode | Plugin package `zz-cosmo-rollback.qdp` (repo + local build) | `https://github.com/saintromuald/cosmonarchy-rollback.git` |
+| cmbw-root | — | Maps | `https://gitlab.com/the-no-frauds-club/cmbw-root.git` |
+
+Stable is the upstream release channel; the list never shows a Stable row for
+a repository that does not exist. Netcode has no builds of its own: it offers
+the Plus-enabled builds (rollback runs on them) plus the rollback plugin.
 
 Game repos clone into `<RootPath>/versions/<id>/` for new installs. Legacy
 checkouts in `<RootPath>/Release` or `<RootPath>/Prerelease` are adopted as
 versions on first launch and keep their directories. Maps clone into
-`<RootPath>/Starcraft/maps/CMBW-Root`. The selected repo id, the "show
-unofficial repos" flag, the installed version list, and the selected version
+`<RootPath>/Starcraft/maps/CMBW-Root`. Plugin repos install into the shared
+`variants/` folder (plus a checkout under `<RootPath>/plugins/` when the
+plugin is fetched from git). The selected repo id, the "show unofficial
+repos" flag, the installed version and plugin lists, and the selected version
 persist across runs.
 
 ## 2. Layout
@@ -46,7 +54,12 @@ directory inside `~/Games/cosmonarchy/prefix`.
   versions/
     <id>/               a game checkout installed by this launcher
       Cosmonarchy BW.exe, plugins/, mpq/, temp.mpq
+  plugins/
+    rollback/           checkout of a plugin repo (when installed from git)
   starcraft.zip         transient
+
+<prefix root>/variants/  staged .qdp plugin builds (Linux; Windows:
+                         <RootPath>/variants/)
 ```
 
 Every version shares the Starcraft base, the maps repo, the patches, and the
@@ -68,11 +81,13 @@ Order of operations, each reported to the UI:
    GitHub, pick the `.snp` asset (prefer `crownlink.snp`). Skip when the file
    size matches and the asset id is cached.
 4. **Game repo.** Scoped to the selected installed version. Clone into the
-   version's own directory when absent (or when the origin URL differs).
-   Otherwise: fetch; skip the reset when the tree has local changes; a
-   **tracked** version checks out the repo's branch and resets it to
-   `<remote>/<branch>`, a **pinned** version hard-resets to its pinned commit;
-   update submodules.
+   version's own directory when absent. Immediately after the clone a tracked
+   version checks out the entry's branch — `plus` for the Plus mirror builds,
+   `master` for the archives, `main` otherwise — so "Latest" never leaves the
+   checkout on the remote's default snapshot. Otherwise: fetch; skip the reset
+   when the tree has local changes; a **tracked** version checks out the repo's
+   branch and resets it to `<remote>/<branch>`, a **pinned** version
+   hard-resets to its pinned commit; update submodules.
 5. **Maps.** Clone or fetch + reset `origin/main`.
 6. **Wine.** When running under Wine, set `HKCU\Software\Wine\DllOverrides`
    `ddraw = native,builtin`.
@@ -86,17 +101,51 @@ determinate progress bar driven by that percentage; git clones/fetches (which
 cannot know their size up front) report bytes + objects instead
 (`Fetching <url>… 128 MB · 2,041 / 4,512 objects`) and show an indeterminate
 bar. Responses that are gzip-encoded or carry no content length report bytes
-only — a percentage against the compressed size would be wrong.
+only — a percentage against the compressed size would be wrong. The git
+transfer callback must return **true** to keep going; returning false cancels
+the clone with `indexer progress callback returned -7`, and only remote clones
+(rather than local file clones) hit it.
 
-Version management: the Play page lists every installed version; Play, Update,
-and Delete act on the selected one, and Install always creates a *new* version
-(never touching existing checkouts). An install either tracks the repo's
-branch (updates to the newest build on play/update) or pins one specific
-commit from the log (frozen until removed or explicitly updated).
+Version management: the Play page lists the installed versions **of the
+selected variant family**; Play, Update, and Delete act on the selected one,
+and Install always creates a *new* version (never touching existing
+checkouts). A version record is written before the download starts, so the
+row appears immediately with "not downloaded yet"; a failed clone keeps the
+record and Update retries it. Repeats of the same default name get
+" (2)", " (3)", … so two installs of one repository never look identical. An
+install either tracks the repo's branch (updates to the newest build on
+play/update) or pins one specific commit from the log (frozen until removed or
+explicitly updated).
+
+Plugin installs are separate rows in the same filtered list:
+
+- **Plus** downloads the newest `CosmonarchyPlus-plugins-*.zip` GitHub release
+  asset and extracts its .qdp files (Plus and rollback, version-matched).
+- **Netcode** clones/fetches the rollback repository, checks out its
+  `cosmonarchy-plus` branch, and copies the built `zz-cosmo-rollback.qdp` from
+  the checkout, the local project build, or an already-staged copy. It fails
+  with a clear message when none exists.
+- Each installed plugin records the files and their SHA-256. Remove deletes a
+  file only when this record wrote the copy now on disk and no other plugin
+  package still needs it.
 
 ## 4. Variants and launch
 
-The build's `plugins/*.qdp` set determines the variant:
+The Play page's bottom **Variant** dropdown is the master switch:
+
+| Filter | Installable repositories | Installed list | Staging on play |
+| --- | --- | --- | --- |
+| Original | Stable (upstream release), Prerelease, Original/old-release/nightly archives, unofficial mirrors | Original builds | no plugin; rollback qdp inert |
+| Plus | Plus mirror builds (plus branch), Plus plugin package | Plus builds and the Plus plugin | Plus + rollback staged; role or solo |
+| Netcode | Plus mirror builds, Rollback plugin package | Netcode builds and the rollback plugin | rollback armed; host/guest only |
+
+Each installed row carries a coloured ORIGINAL / PLUS / NETCODE badge and a
+Build/Plugin label. The variant stored on a version decides its staging, so
+pressing Play on an Original install never picks up a Plus plugin because the
+filter was left on Plus. Within one browser session the variant remembers the
+repository last picked in it.
+
+The build's `plugins/*.qdp` set determines what the game loads:
 
 | Variant | plus qdp | rollback qdp | arming |
 | --- | --- | --- | --- |
@@ -173,11 +222,17 @@ Persisted in `~/.config/cosmonarchy-plus-launcher/settings.json` (Linux) or
 
 - root path, selected repo, show unofficial repos
 - installed versions (id, name, repo id, checkout dir, optional pinned
-  commit, installed commit) and the selected version id
-- variant and netcode role
+  commit, installed commit, **variant family**) and the selected version id
+- installed plugins (id, name, repo id, variant, release tag/commit, the
+  files with their SHA-256, optional checkout dir)
+- variant filter and netcode role
 - action on play, full version log
 - account token, installed patch ids, CrownLink asset id
 - Linux prefix root
+
+Records written before the variant field existed have no family stored; they
+inherit their repository's family (`release` → Plus, `prerelease` → Original)
+and are not rewritten unless another change saves the file.
 
 ## 8. Replays
 

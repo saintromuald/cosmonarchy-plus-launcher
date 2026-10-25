@@ -9,10 +9,10 @@ Avalonia UI (src/CosmonarchyPlusLauncher)
 Core (src/CosmonarchyPlusLauncher.Core)  ← all platform logic, no UI deps
         │
         ├── Settings   AppSettings (JSON persistence)
-        ├── Services   RepoCatalog, RepoManager, InstallService,
-        │              PluginStager, AccountService, CrownLinkService,
-        │              PatchManifestService
-        └── Models     RepoEntry, Variant, CommitInfo, Patch, User
+        ├── Services   RepoCatalog, RepoManager, InstallService, InstallPaths,
+        │              PluginStager, PluginInstallService, AccountService,
+        │              CrownLinkService, PatchManifestService
+        └── Models     RepoEntry, Variant, GameVersion, PluginVersion
 ```
 
 The UI never touches LibGit2Sharp, Octokit, or the filesystem directly; it
@@ -34,6 +34,21 @@ so every page can be unit-tested headless.
 - **Variant staging is a directory contract**: a variant is the set of
   `plugins/*.qdp` files plus environment arming. Identical on Linux and
   Windows; only the process start differs.
+- **Variant families are data, not just UI state**: every `RepoEntry` declares
+  its family (Original / Plus / Netcode), every `GameVersion` stores the family
+  it was installed as (legacy records infer it from the repo), and every
+  `PluginVersion` belongs to one. The Play page's dropdown filters both lists
+  from that data and `InstallService` stages the *version's* family, so the
+  filter and the launched plugin set cannot disagree.
+- **Plugin packages are first-class installs**: Plus comes from its release
+  zip, Netcode from the rollback checkout/local build. Both land in the shared
+  `variants` directory and record file hashes, so Remove never deletes a
+  hand-built copy.
+- **Git progress callbacks return true to continue**: LibGit2Sharp's
+  `OnTransferProgress` contract is inverted from what a "progress reporter"
+  suggests (`true` = keep going). Returning `false` aborts a remote clone with
+  `indexer progress callback returned -7`; local file clones never call the
+  indexer callback, so a smoke test against local repos would miss it.
 
 ## Ports of existing scripts
 
