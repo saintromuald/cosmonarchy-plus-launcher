@@ -171,7 +171,7 @@ public class CoreTests
     }
 
     [Fact]
-    public void PluginStager_plus_without_a_role_disarms()
+    public void PluginStager_plus_solo_keeps_netcode_out()
     {
         var tmp = Path.Combine(Path.GetTempPath(), $"cpl-stage-{Guid.NewGuid():N}");
         var build = Path.Combine(tmp, "Release");
@@ -190,7 +190,9 @@ public class CoreTests
             new PluginStager(build, stage, tmp).Apply(Variant.Plus, null);
 
             Assert.True(File.Exists(Path.Combine(plugins, "zz-cosmo-plus.qdp")));
-            Assert.True(File.Exists(Path.Combine(plugins, "zz-cosmo-rollback.qdp")));
+            // Netcode applies only when hosting or joining as guest: Solo
+            // must not contain the rollback plugin at all.
+            Assert.False(File.Exists(Path.Combine(plugins, "zz-cosmo-rollback.qdp")));
             Assert.Null(Environment.GetEnvironmentVariable("CM_ROLLBACK_LIVE"));
             Assert.Null(Environment.GetEnvironmentVariable("CM_ROLLBACK_SLOT"));
             Assert.False(File.Exists(Path.Combine(plugins, "cosmo_rollback.conf")));
@@ -443,7 +445,7 @@ public class CoreTests
     }
 
     [Fact]
-    public void PluginStager_original_variant_removes_plus_and_disarms()
+    public void PluginStager_original_variant_removes_plugins_and_disarms()
     {
         var tmp = Path.Combine(Path.GetTempPath(), $"cpl-stage-{Guid.NewGuid():N}");
         var build = Path.Combine(tmp, "Release");
@@ -452,6 +454,7 @@ public class CoreTests
         Directory.CreateDirectory(plugins);
         Directory.CreateDirectory(stage);
         File.WriteAllText(Path.Combine(plugins, "zz-cosmo-plus.qdp"), "x");
+        File.WriteAllText(Path.Combine(plugins, "zz-cosmo-rollback.qdp"), "x");
 
         Environment.SetEnvironmentVariable("CM_ROLLBACK_LIVE", "1");
         Environment.SetEnvironmentVariable("CM_ROLLBACK_SLOT", "0");
@@ -461,6 +464,7 @@ public class CoreTests
             stager.Apply(Variant.Original, null);
 
             Assert.False(File.Exists(Path.Combine(plugins, "zz-cosmo-plus.qdp")));
+            Assert.False(File.Exists(Path.Combine(plugins, "zz-cosmo-rollback.qdp")));
             Assert.Null(Environment.GetEnvironmentVariable("CM_ROLLBACK_LIVE"));
             Assert.Null(Environment.GetEnvironmentVariable("CM_ROLLBACK_SLOT"));
         }
@@ -490,8 +494,8 @@ public class CoreTests
             stager.Apply(Variant.Plus, NetcodeRole.Solo);
 
             Assert.True(File.Exists(Path.Combine(plugins, "zz-cosmo-plus.qdp")));
-            Assert.True(File.Exists(Path.Combine(plugins, "zz-cosmo-rollback.qdp")));
-            // solo: plus staged, but not armed
+            // Solo: Plus staged, netcode not applied at all.
+            Assert.False(File.Exists(Path.Combine(plugins, "zz-cosmo-rollback.qdp")));
             Assert.Null(Environment.GetEnvironmentVariable("CM_ROLLBACK_LIVE"));
         }
         finally
@@ -845,7 +849,7 @@ public class CoreTests
     {
         var pinned = new GameVersion { Name = "X", RepoId = "release", PinnedSha = "1234567890abcdef" };
         Assert.Contains("pinned 12345678", pinned.Summary);
-        Assert.Contains("Release — Plus (My Build)", pinned.Summary);
+        Assert.Contains("Plus — Release", pinned.Summary);
 
         var tracked = new GameVersion { Name = "X", RepoId = "release" };
         Assert.Contains("tracks plus", tracked.Summary);
@@ -855,25 +859,28 @@ public class CoreTests
     [Fact]
     public void Catalog_separates_variants_and_offers_stable_for_original()
     {
-        // Original is the vanilla game: upstream stable (release) + prerelease.
+        // Original CM is the vanilla game: upstream release + prerelease.
         var original = RepoCatalog.ForVariant(Variant.Original, includeUnofficial: false);
         Assert.Contains(original, r => r.Id == "release-upstream");
         Assert.Contains(original, r => r.Id == "prerelease");
         Assert.All(original, r => Assert.Equal(Variant.Original, r.Variant));
-        Assert.Contains(original, r => r.Name.Contains("Stable", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(original, r => r.Name.Contains("Release (Upstream)", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(original, r => r.Kind == RepoKind.Plugin);
 
-        // Plus is the maintainer's plus branch plus the Plus plugin.
+        // Plus is the full product: the maintainer's plus-branch builds, the
+        // gameplay features plugin, and its netcode (online is part of Plus).
         var plus = RepoCatalog.ForVariant(Variant.Plus, includeUnofficial: false);
         Assert.Contains(plus, r => r.Id == "release" && r.Branch == "plus");
         Assert.Contains(plus, r => r.Id == "prerelease-mine" && r.Branch == "plus");
         Assert.Contains(plus, r => r.Id == "plus" && r.Kind == RepoKind.Plugin);
+        Assert.Contains(plus, r => r.Id == "rollback" && r.Kind == RepoKind.Plugin);
         Assert.DoesNotContain(plus, r => r.Id == "release-upstream");
 
-        // Netcode stages the rollback plugin on the plus-capable builds.
+        // Original CM Netcode arms the netcode plugin on the vanilla builds.
         var netcode = RepoCatalog.ForVariant(Variant.Netcode, includeUnofficial: false);
         Assert.Contains(netcode, r => r.Id == "rollback" && r.Kind == RepoKind.Plugin);
-        Assert.Contains(netcode, r => r.Id == "release");
-        Assert.DoesNotContain(netcode, r => r.Variant == Variant.Original);
+        Assert.Contains(netcode, r => r.Id == "release-upstream");
+        Assert.DoesNotContain(netcode, r => r.Variant == Variant.Plus);
     }
 
     [Fact]
@@ -1023,7 +1030,7 @@ public class CoreTests
                     new PluginVersion
                     {
                         Id = "cosmonarchy-plus-plugin-v0-2-0",
-                        Name = "Cosmonarchy Plus plugin — v0.2.0",
+                        Name = "Plus features (auto-managed) — v0.2.0",
                         RepoId = "plus",
                         Variant = Variant.Plus,
                         Version = "v0.2.0",
@@ -1038,7 +1045,54 @@ public class CoreTests
             Assert.Equal(Variant.Plus, plugin.Variant);
             Assert.Equal("v0.2.0", plugin.Version);
             Assert.Equal("zz-cosmo-plus.qdp", Assert.Single(plugin.Files).Name);
-            Assert.Contains("plugin v0.2.0", plugin.Summary);
+            Assert.Contains("v0.2.0", plugin.Summary);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Load_renames_legacy_stored_names_once()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cpl-legacy-{Guid.NewGuid():N}.json");
+        try
+        {
+            var settings = new AppSettings
+            {
+                FilePath = path,
+                Versions =
+                [
+                    new GameVersion { Id = "v1", Name = "Release — Plus (My Build) — Latest", RepoId = "release" },
+                    new GameVersion { Id = "v2", Name = "Prerelease (Upstream)", RepoId = "prerelease" },
+                    new GameVersion
+                    {
+                        Id = "v3",
+                        Name = "Release — Stable (Upstream) — Netcode — abc12345",
+                        RepoId = "release-upstream",
+                        Variant = Variant.Netcode,
+                    },
+                ],
+                Plugins =
+                [
+                    new PluginVersion { Id = "p1", Name = "Cosmonarchy Rollback plugin — 1234abcd", RepoId = "rollback" },
+                ],
+            };
+            settings.Save();
+
+            var loaded = AppSettings.Load(path);
+            Assert.Equal("Plus — Release — Latest", loaded.Versions[0].Name);
+            Assert.Equal("Original CM — Prerelease (Upstream)", loaded.Versions[1].Name);
+            Assert.Equal("Original CM — Release (Upstream) — Original CM Netcode — abc12345",
+                loaded.Versions[2].Name);
+            Assert.Equal("Plus Netcode — 1234abcd", loaded.Plugins[0].Name);
+            // Ids and pins are display-only concerns; they stay untouched.
+            Assert.Equal("v1", loaded.Versions[0].Id);
+
+            // Idempotent: loading again must not rename twice.
+            var again = AppSettings.Load(path);
+            Assert.Equal("Plus — Release — Latest", again.Versions[0].Name);
         }
         finally
         {

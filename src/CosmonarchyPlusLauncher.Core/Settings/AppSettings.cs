@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CosmonarchyPlusLauncher.Core.Models;
+using CosmonarchyPlusLauncher.Core.Services;
 
 namespace CosmonarchyPlusLauncher.Core.Settings;
 
@@ -128,6 +129,11 @@ public sealed class AppSettings
             {
                 var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path)) ?? new();
                 loaded.FilePath = path;
+                // One-time display-name migration: records written before the
+                // Original CM / Plus / Original CM Netcode naming are renamed
+                // to the new catalog names (ids and folders stay untouched).
+                if (LegacyNames.Apply(loaded))
+                    loaded.Save();
                 return loaded;
             }
             catch (JsonException)

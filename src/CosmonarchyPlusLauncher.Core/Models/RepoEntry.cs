@@ -27,9 +27,9 @@ public sealed record RepoEntry(
 {
     public override string ToString() => Name;
 
-    /// <summary>Short badge text shown next to the name ("ORIGINAL",
+    /// <summary>Short badge text shown next to the name ("ORIGINAL CM",
     /// "PLUS", "NETCODE").</summary>
-    public string Badge => Variant.ToString().ToUpperInvariant();
+    public string Badge => Variant.BadgeText();
 
     /// <summary>Older name kept for the plugin staging contract: the .qdp
     /// file a plugin repo installs.</summary>

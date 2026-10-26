@@ -63,8 +63,8 @@ public sealed record FollowedRow(string Name, int OgCount, int PlusCount)
     public string PlusLabel => PlusCount.ToString();
 
     public string ChannelLabel =>
-        OgCount > 0 && PlusCount > 0 ? "OG + Plus"
-        : OgCount > 0 ? "OG"
+        OgCount > 0 && PlusCount > 0 ? "Original CM + Plus"
+        : OgCount > 0 ? "Original CM"
         : PlusCount > 0 ? "Plus"
         : "no games";
 }
@@ -79,7 +79,7 @@ public sealed record FollowedReplayRow(
     public string DurationLabel => Match.DurationLabel;
     public string VersionLabel => Match.VersionLabel;
 
-    public string ChannelLabel => Channel == ReplayChannel.Plus ? "Plus" : "OG";
+    public string ChannelLabel => Channel == ReplayChannel.Plus ? "Plus" : "Original CM";
 
     public string Badges => string.Concat(
         Favorite ? "★ " : "",

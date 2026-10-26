@@ -32,10 +32,10 @@ public sealed class PluginVersion
     public RepoEntry? Repo => string.IsNullOrEmpty(RepoId) ? null : RepoCatalog.Find(RepoId);
 
     [JsonIgnore]
-    public string VariantLabel => Variant.ToString();
+    public string VariantLabel => Variant.Label();
 
     [JsonIgnore]
-    public string Badge => Variant.ToString().ToUpperInvariant();
+    public string Badge => Variant.BadgeText();
 
     /// <summary>One-line description for the installed list.</summary>
     [JsonIgnore]

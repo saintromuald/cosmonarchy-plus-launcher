@@ -39,7 +39,7 @@ public sealed class InstalledEntry
 
     public string Id => Version is not null ? $"v:{Version.Id}" : $"p:{Plugin!.Id}";
 
-    public string Badge => Variant.ToString().ToUpperInvariant();
+    public string Badge => Variant.BadgeText();
 
     public IBrush BadgeBrush => Variant switch
     {
@@ -53,5 +53,5 @@ public sealed class InstalledEntry
 
     public string PlayHint => CanPlay
         ? "Play this build with the variant's plugin set."
-        : "Plugins are staged when you play a build of this variant; select a build to play.";
+        : "Not a game version — this plugin is applied automatically when you play a build. Select a build to play.";
 }
