@@ -8,7 +8,7 @@
              x:Class="CosmonarchyPlusLauncher.Views.PlayPage"
              x:DataType="vm:PlayViewModel">
 
-    <Grid Margin="16" RowDefinitions="Auto,*,Auto,Auto,Auto">
+    <Grid Margin="16" RowDefinitions="Auto,*,Auto,Auto,Auto,Auto">
 
         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10">
             <TextBlock Text="Play" FontSize="20" FontWeight="SemiBold" />
@@ -58,9 +58,6 @@
                 <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
                     <Button Content="Play" MinWidth="110" Command="{Binding PlayCommand}"
                             IsEnabled="{Binding CanPlay}" />
-                    <Button Content="Play Remastered" MinWidth="110"
-                            Command="{Binding PlayRemasteredCommand}"
-                            IsVisible="{Binding RemasteredVisible}" />
                     <Button Content="Update" MinWidth="110" Command="{Binding UpdateCommand}"
                             IsEnabled="{Binding CanManage}" />
                     <Button Content="Delete" MinWidth="110" Command="{Binding DeleteCommand}"
@@ -134,7 +131,7 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="Variant:" FontWeight="SemiBold" VerticalAlignment="Center" />
                     <ComboBox ItemsSource="{Binding Variants}"
-                              SelectedItem="{Binding Variant}" MinWidth="150" />
+                              SelectedItem="{Binding SelectedVariant}" MinWidth="150" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="14,0,0,0"
                             IsVisible="{Binding RoleVisible}">
@@ -171,12 +168,43 @@
                 IsVisible="{Binding ShowRemasteredUnlock}">
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBox Text="{Binding RemasteredPassword}" PasswordChar="•"
-                         PlaceholderText="Access password" MinWidth="200" />
-                <Button Content="Unlock" Command="{Binding UnlockRemasteredCommand}"
+                         PlaceholderText="{Binding RemasteredPromptLabel}" MinWidth="200" />
+                <Button Content="{Binding RemasteredUnlockButtonLabel}"
+                        Command="{Binding UnlockRemasteredCommand}"
                         MinWidth="90" />
                 <TextBlock Text="{Binding RemasteredStatus}" VerticalAlignment="Center"
                            TextWrapping="Wrap" />
             </StackPanel>
+        </Border>
+
+        <!-- Remastered launch controls (unlocked only): pick the bundle
+             channel, see which version is installed and whether the selected
+             channel has something newer, then play or download. -->
+        <Border Grid.Row="5" Margin="0,8,0,0" Padding="10"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                CornerRadius="4"
+                IsVisible="{Binding RemasteredVisible}">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                <TextBlock Grid.Column="0" Text="Remastered" FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" Margin="8,0,0,0"
+                          ItemsSource="{Binding RemasteredChannels}"
+                          SelectedItem="{Binding RemasteredChannel}"
+                          MinWidth="170" FontSize="12">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:RemasteredChannelOption">
+                            <TextBlock Text="{Binding Label}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Grid.Column="2" Margin="8,0" VerticalAlignment="Center"
+                           Text="{Binding RemasteredVersionStatus}" TextWrapping="Wrap" />
+                <Button Grid.Column="3" Content="Play Remastered" MinWidth="110"
+                        Command="{Binding PlayRemasteredCommand}" />
+                <Button Grid.Column="4" Margin="8,0,0,0" Content="Download this channel…"
+                        MinWidth="150" Command="{Binding PrepareRemasteredDownloadCommand}"
+                        IsVisible="{Binding RemasteredDownloadVisible}" />
+            </Grid>
         </Border>
     </Grid>
 

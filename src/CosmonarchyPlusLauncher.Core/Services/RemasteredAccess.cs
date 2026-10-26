@@ -52,6 +52,20 @@ public static class RemasteredAccess
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                      ".local", "share", "cosmonarchy-remastered", "version.txt");
 
+    /// <summary>Read the installed bundle marker: first line is the GitHub
+    /// release tag, the second line (written by newer launchers) is the
+    /// channel that bundle came from. Legacy markers have only the tag and
+    /// report an unknown channel.</summary>
+    public static (string Tag, string? Channel) ReadInstalledVersion()
+    {
+        if (!File.Exists(BundleVersionPath))
+            return ("", null);
+        var lines = File.ReadAllLines(BundleVersionPath);
+        var tag = lines.Length > 0 ? lines[0].Trim() : "";
+        var channel = lines.Length > 1 ? lines[1].Trim() : null;
+        return (tag, channel);
+    }
+
     /// <summary>A resolved channel release: download URL + identifying tag.</summary>
     public sealed record BundleRelease(string Url, string Tag);
 
@@ -102,16 +116,19 @@ public static class RemasteredAccess
         {
             string url;
             string tag;
+            string channel;
             if (!string.IsNullOrWhiteSpace(settings.RemasteredBundleUrl))
             {
                 url = settings.RemasteredBundleUrl;
                 tag = "manual";
+                channel = "manual";
             }
             else
             {
                 var r = resolved ?? ResolveLatest(settings.RemasteredChannel);
                 url = r.Url;
                 tag = r.Tag;
+                channel = settings.RemasteredChannel;
             }
             var blob = Fetch(url);
             var plain = Decrypt(blob, password);
@@ -120,7 +137,7 @@ public static class RemasteredAccess
             using var ms = new MemoryStream(plain);
             using var gz = new GZipStream(ms, CompressionMode.Decompress);
             TarFile.ExtractToDirectory(gz, dest, overwriteFiles: true);
-            File.WriteAllText(BundleVersionPath, tag);
+            File.WriteAllText(BundleVersionPath, tag + "\n" + channel);
             return true;
         }
         catch
