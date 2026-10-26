@@ -8,6 +8,16 @@ using CosmonarchyPlusLauncher.Services;
 
 namespace CosmonarchyPlusLauncher.ViewModels;
 
+/// <summary>A Remastered bundle channel as shown in the Play page picker.</summary>
+public sealed record RemasteredChannelOption(string Id, string Label);
+
+/// <summary>A variant family as shown in the Play page picker: the stored
+/// enum plus its product name (Original CM / Plus / Original CM Netcode).</summary>
+public sealed record VariantOption(Variant Value, string Label)
+{
+    public override string ToString() => Label;
+}
+
 public partial class PlayViewModel : ViewModelBase
 {
     private readonly AppSettings _settings = AppRuntime.Settings;
@@ -27,7 +37,20 @@ public partial class PlayViewModel : ViewModelBase
     /// act on the selected one.</summary>
     public ObservableCollection<InstalledEntry> Installed { get; } = new();
 
-    public IReadOnlyList<Variant> Variants { get; } = [Variant.Original, Variant.Plus, Variant.Netcode];
+    /// <summary>The variant families with their product names. The stored
+    /// <see cref="Variant"/> enum keeps ids stable; the picker shows labels.</summary>
+    public IReadOnlyList<VariantOption> Variants { get; } =
+    [
+        new(Variant.Original, "Original CM"),
+        new(Variant.Plus, "Plus"),
+        new(Variant.Netcode, "Original CM Netcode"),
+    ];
+
+    /// <summary>The variant picker's selection; round-trips with
+    /// <see cref="Variant"/> (records compare by value, so re-selecting the
+    /// same option never loops).</summary>
+    [ObservableProperty]
+    private VariantOption? _selectedVariant;
 
     /// <summary>Plus has the unarmed "solo" mode first (it is the mode that
     /// works for normal play); netcode is turn-based and only has host/guest
@@ -103,8 +126,31 @@ public partial class PlayViewModel : ViewModelBase
     [ObservableProperty]
     private bool _remasteredVisible;
 
-    /// <summary>Unlock affordance (visible until unlocked): password box,
-    /// Unlock button, status. Unlocking reveals the Play Remastered button.</summary>
+    /// <summary>Remastered bundle channels: stable release vs. prerelease
+    /// testing. Changing the selection persists it and re-checks what is
+    /// installed against that channel's newest bundle.</summary>
+    public IReadOnlyList<RemasteredChannelOption> RemasteredChannels { get; } =
+        [new(RemasteredAccess.ChannelRelease, "Release (stable)"),
+         new(RemasteredAccess.ChannelPrerelease, "Prerelease (testing)")];
+
+    [ObservableProperty]
+    private RemasteredChannelOption? _remasteredChannel;
+
+    /// <summary>One-line summary distinguishing what is installed from what
+    /// the selected channel offers: installed tag + channel, and whether the
+    /// selected channel is up to date, newer, or not installed.</summary>
+    [ObservableProperty]
+    private string _remasteredVersionStatus = "";
+
+    /// <summary>True when the installed bundle does not match the selected
+    /// channel's newest bundle (or nothing is installed): the Download
+    /// affordance is shown and the password row can be revealed.</summary>
+    [ObservableProperty]
+    private bool _remasteredDownloadVisible;
+
+    /// <summary>Unlock affordance: password box, Unlock/Download button,
+    /// status. Visible until unlocked, and again whenever a channel download
+    /// is pending. Unlocking reveals the Remastered play controls.</summary>
     [ObservableProperty]
     private string _remasteredPassword = "";
 
@@ -113,6 +159,12 @@ public partial class PlayViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _showRemasteredUnlock = true;
+
+    /// <summary>True while the password row is being used to fetch the
+    /// selected channel's bundle (not a first-time unlock).</summary>
+    private bool _remasteredDownloadPending;
+
+    private int _remasteredToken;
 
     private string? _pendingDeleteId;
     private int _loadToken;
@@ -134,14 +186,14 @@ public partial class PlayViewModel : ViewModelBase
     public string InstallHeading => Variant switch
     {
         Variant.Plus => "Install a new Plus build or plugin",
-        Variant.Netcode => "Install a new Netcode build or plugin",
-        _ => "Install a new Original build",
+        Variant.Netcode => "Install a new Original CM Netcode build or plugin",
+        _ => "Install a new Original CM build",
     };
 
-    public string InstalledHeading => $"{Variant} builds and plugins ({Installed.Count})";
+    public string InstalledHeading => $"{Variant.Label()} builds and plugins ({Installed.Count})";
 
     public string EmptyHint => Installed.Count == 0
-        ? $"Nothing installed for {Variant} yet. Install one on the right — it appears here immediately."
+        ? $"Nothing installed for {Variant.Label()} yet. Install one on the right — it appears here immediately."
         : "";
 
     public string SelectionHint => SelectedInstall is null
@@ -150,18 +202,19 @@ public partial class PlayViewModel : ViewModelBase
 
     public string VariantHint => Variant switch
     {
-        Variant.Original => "Vanilla game builds: Stable (Upstream release), Prerelease, and the archives.",
-        Variant.Plus => "Plus-enabled builds (the mirror's plus branch) and the Plus/rollback plugins.",
-        _ => "The rollback plugin staged on the Plus-enabled builds. Pick a build and a role to play.",
+        Variant.Original => "Vanilla Cosmonarchy (Original CM): the upstream Stable and Prerelease channels and the old archives. No plugins.",
+        Variant.Plus => "Cosmonarchy Plus: the full product — Plus gameplay with online capability. Plus Netcode applies only when you host or join; Solo plays offline.",
+        _ => "Original CM Netcode: vanilla builds with the Plus Netcode plugin armed. Pick a build, then host or join a match.",
     };
 
-    /// <summary>Warn when the chosen role arms the rollback turn system: it
-    /// takes over mouse and keyboard input while it is under development, so
-    /// normal play must use Solo (Plus) or avoid launching Netcode builds.</summary>
+    /// <summary>Warn when the chosen role applies the Plus Netcode turn
+    /// system: it takes over mouse and keyboard input while it is under
+    /// development, so normal play must use Solo (Plus) or avoid launching
+    /// Original CM Netcode builds.</summary>
     public string RoleWarning => Variant == Variant.Plus && Role is not null and not NetcodeRole.Solo
-        ? "Warning: Host/Guest arms the rollback turn system, which takes over the mouse and keyboard (netcode testing only). Choose Solo for normal play."
+        ? "Warning: Host/Guest applies the Plus Netcode turn system, which takes over the mouse and keyboard (netcode testing only). Choose Solo for normal play."
         : Variant == Variant.Netcode
-            ? "Warning: Netcode builds run armed — the turn system takes over the mouse and keyboard. Close the game to end the session."
+            ? "Warning: Original CM Netcode runs armed — the turn system takes over the mouse and keyboard. Close the game to end the session."
             : "";
 
     public bool RoleWarningVisible => RoleWarning.Length > 0;
@@ -171,19 +224,23 @@ public partial class PlayViewModel : ViewModelBase
     public string RepoHint => SelectedRepo is null
         ? ""
         : SelectedRepo.Kind == RepoKind.Plugin
-            ? $"Installs {SelectedRepo.PluginFileName} into the shared variants folder " +
-              "(used when a build of this variant launches)."
-            : $"Clones the game build into its own folder under versions/ ({Variant} family).";
+            ? $"Not a game version — installs {SelectedRepo.PluginFileName} into the shared plugins " +
+              "folder, applied automatically when a build of this variant launches."
+            : $"Clones the game build into its own folder under versions/ ({Variant.Label()} family).";
 
     public PlayViewModel()
     {
         _showUnofficial = _settings.ShowUnofficialRepos;
         RemasteredVisible = RemasteredAccess.IsUnlocked(_settings);
         ShowRemasteredUnlock = !RemasteredVisible;
+        _remasteredChannel = RemasteredChannels.FirstOrDefault(c => c.Id == _settings.RemasteredChannel)
+                             ?? RemasteredChannels[0];
+        RefreshRemasteredState();
         _repoByVariant[Variant] = _settings.SelectedRepoId;
         _role = Variant == Variant.Netcode
             ? _settings.NetcodeRole ?? NetcodeRole.Host
             : _settings.PlusRole;
+        _selectedVariant = Variants.FirstOrDefault(v => v.Value == Variant) ?? Variants[0];
         RebuildRepos();
         SelectedRepo = Repos.FirstOrDefault(r => r.Id == _settings.SelectedRepoId) ?? Repos.FirstOrDefault();
         ReloadInstalled();
@@ -197,8 +254,15 @@ public partial class PlayViewModel : ViewModelBase
         RebuildRepos();
     }
 
+    partial void OnSelectedVariantChanged(VariantOption? value)
+    {
+        if (value is not null && value.Value != Variant)
+            Variant = value.Value;
+    }
+
     partial void OnVariantChanged(Variant value)
     {
+        SelectedVariant = Variants.FirstOrDefault(v => v.Value == value);
         _settings.Variant = value;
         _settings.Save();
         // Each family keeps its own role: switching filters must not arm the
@@ -295,6 +359,7 @@ public partial class PlayViewModel : ViewModelBase
     private void Refresh()
     {
         RemasteredVisible = RemasteredAccess.IsUnlocked(_settings);
+        RefreshRemasteredState();
         // Re-scan in case the install root holds checkouts the launcher has
         // not recorded yet (only happens while the list is empty).
         if (_versions.Versions.Count == 0)
@@ -316,6 +381,18 @@ public partial class PlayViewModel : ViewModelBase
         Status = status;
     }
 
+    /// <summary>Reveal the password row so the selected channel's bundle can
+    /// be fetched. The Unlock command re-verifies the password, then
+    /// downloads and decrypts the selected channel's newest bundle when what
+    /// is installed does not match it.</summary>
+    [RelayCommand]
+    private void PrepareRemasteredDownload()
+    {
+        _remasteredDownloadPending = true;
+        UpdateRemasteredPrompt();
+        Status = $"Enter the password to download the {SelectedChannelLabel()} bundle.";
+    }
+
     /// <summary>Verify the unlock password and (re)install the private bundle.</summary>
     [RelayCommand]
     private void UnlockRemastered()
@@ -325,8 +402,100 @@ public partial class PlayViewModel : ViewModelBase
         {
             RemasteredPassword = "";
             RemasteredVisible = RemasteredAccess.IsUnlocked(_settings);
-            ShowRemasteredUnlock = !RemasteredVisible;
+            _remasteredDownloadPending = false;
+            RefreshRemasteredState();
         }
+    }
+
+    partial void OnRemasteredChannelChanged(RemasteredChannelOption? value)
+    {
+        if (value is null)
+            return;
+        _settings.RemasteredChannel = value.Id;
+        _settings.Save();
+        _remasteredDownloadPending = false;
+        RefreshRemasteredState();
+    }
+
+    /// <summary>Password-row caption: first-time unlock or a channel
+    /// download both reuse the same box.</summary>
+    public string RemasteredPromptLabel =>
+        _remasteredDownloadPending
+            ? $"Password to download the {SelectedChannelLabel()} bundle"
+            : "Access password";
+
+    /// <summary>The password-row button confirms an unlock, or downloads the
+    /// selected channel's bundle when that is what the row was opened for.</summary>
+    public string RemasteredUnlockButtonLabel => _remasteredDownloadPending ? "Download" : "Unlock";
+
+    private string SelectedChannelLabel() =>
+        RemasteredChannel?.Label ?? RemasteredAccess.ChannelRelease;
+
+    private string ChannelLabel(string id) =>
+        RemasteredChannels.FirstOrDefault(c => c.Id == id)?.Label ?? id;
+
+    /// <summary>Recompute what is installed vs. the selected channel's newest
+    /// bundle. The installed side is read from disk immediately; the remote
+    /// tag resolves off the UI thread (network) behind a token so a stale
+    /// result never overwrites a newer selection.</summary>
+    private void RefreshRemasteredState()
+    {
+        var (tag, channel) = RemasteredAccess.ReadInstalledVersion();
+        var selected = RemasteredChannel?.Id ?? RemasteredAccess.ChannelRelease;
+        var token = ++_remasteredToken;
+        Task.Run(() =>
+        {
+            string latestTag;
+            try
+            {
+                latestTag = RemasteredAccess.ResolveLatest(selected).Tag;
+            }
+            catch
+            {
+                latestTag = "";
+            }
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (token != _remasteredToken)
+                    return;
+                UpdateRemasteredStatus(tag, channel, selected, latestTag);
+            });
+        });
+    }
+
+    private void UpdateRemasteredStatus(string tag, string? channel, string selected, string latestTag)
+    {
+        if (string.IsNullOrEmpty(tag))
+        {
+            RemasteredVersionStatus =
+                $"No Remastered bundle installed ({SelectedChannelLabel()} selected).";
+            RemasteredDownloadVisible = true;
+        }
+        else
+        {
+            var installedLabel = ChannelLabel(channel ?? "unknown");
+            var sameChannel = channel == selected;
+            var upToDate = sameChannel && !string.IsNullOrEmpty(latestTag) && latestTag == tag;
+            if (upToDate)
+                RemasteredVersionStatus = $"Installed: {tag} ({installedLabel}) — up to date.";
+            else if (sameChannel)
+                RemasteredVersionStatus = string.IsNullOrEmpty(latestTag)
+                    ? $"Installed: {tag} ({installedLabel}) — could not check for updates (offline?)."
+                    : $"Installed: {tag} ({installedLabel}) — update available: {latestTag}.";
+            else
+                RemasteredVersionStatus = string.IsNullOrEmpty(latestTag)
+                    ? $"Installed: {tag} ({installedLabel}) — select it to switch back."
+                    : $"Installed: {tag} ({installedLabel}) — {SelectedChannelLabel()} has {latestTag}; download to switch.";
+            RemasteredDownloadVisible = !upToDate;
+        }
+        UpdateRemasteredPrompt();
+    }
+
+    private void UpdateRemasteredPrompt()
+    {
+        ShowRemasteredUnlock = !RemasteredVisible || (_remasteredDownloadPending && RemasteredDownloadVisible);
+        OnPropertyChanged(nameof(RemasteredPromptLabel));
+        OnPropertyChanged(nameof(RemasteredUnlockButtonLabel));
     }
 
     private void LoadSources(bool announce = true)
@@ -350,7 +519,7 @@ public partial class PlayViewModel : ViewModelBase
         if (repo.Kind == RepoKind.Plugin)
         {
             if (announce)
-                Status = $"{repo.Name} installs the newest plugin build into the shared variants folder.";
+                Status = $"{repo.Name} installs the newest plugin build into the shared plugins folder.";
             return;
         }
 
