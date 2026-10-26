@@ -5,11 +5,13 @@ namespace CosmonarchyPlusLauncher.Core.Services;
 /// <summary>The repositories the launcher knows about, grouped by the
 /// variant family they belong to.
 ///
-/// <para><b>Original</b> is the vanilla game: the upstream stable (release)
-/// and prerelease channels, plus the pre-split and 2023 archives that the
-/// launcher can backdate to. <b>Plus</b> is the maintainer's Plus-enabled
-/// game builds (the mirror's <c>plus</c> branch) and the Plus plugin.
-/// <b>Netcode</b> stages the rollback plugin on the Plus-enabled builds.</para>
+/// <para><b>Original CM</b> is the vanilla game: the upstream stable
+/// (release) and prerelease channels, plus the pre-split and 2023 archives
+/// that the launcher can backdate to. <b>Plus</b> is the full product — the
+/// maintainer's Plus game builds (the mirror's <c>plus</c> branch), the Plus
+/// gameplay features, and Plus Netcode (its online capability).
+/// <b>Original CM Netcode</b> arms the Plus Netcode plugin on the vanilla
+/// builds, so those are offered there too.</para>
 ///
 /// <para>Upstream's release channel is the stable build: there is no
 /// separate <c>cosmonarchy-bw-stable</c> repository. A Stable entry is only
@@ -19,15 +21,18 @@ public static class RepoCatalog
 {
     public const string DefaultGameRepoId = "release";
 
+    /// <summary>The catalog id of the netcode (rollback) plugin repository.</summary>
+    public const string NetcodePluginId = "rollback";
+
     /// <summary>Official entries, grouped by variant family. The maintainer's
     /// Plus builds come from the GitHub mirrors; upstream GitLab repositories
-    /// supply the vanilla (Original) channels and the archives.</summary>
+    /// supply the vanilla (Original CM) channels and the archives.</summary>
     public static IReadOnlyList<RepoEntry> Official { get; } =
     [
-        // ---- Original: the vanilla game -------------------------------
+        // ---- Original CM: the vanilla game -----------------------------
         new(
             "release-upstream",
-            "Release — Stable (Upstream)",
+            "Original CM — Release (Upstream)",
             "https://gitlab.com/the-no-frauds-club/cosmonarchy-bw-release.git",
             RepoKind.Game,
             BuildDir: "Release",
@@ -35,7 +40,7 @@ public static class RepoCatalog
         ),
         new(
             "prerelease",
-            "Prerelease (Upstream)",
+            "Original CM — Prerelease (Upstream)",
             "https://gitlab.com/the-no-frauds-club/cosmonarchy-bw-prerelease.git",
             RepoKind.Game,
             BuildDir: "Prerelease",
@@ -43,7 +48,7 @@ public static class RepoCatalog
         ),
         new(
             "original",
-            "Cosmonarchy Original (pre-split archive)",
+            "Original CM — Pre-split Archive",
             "https://gitlab.com/the-no-frauds-club/cosmonarchy.git",
             RepoKind.Game,
             BuildDir: "Original",
@@ -52,7 +57,7 @@ public static class RepoCatalog
         ),
         new(
             "old-release",
-            "Old Release Archive (2023)",
+            "Original CM — 2023 Archive",
             "https://gitlab.com/the-no-frauds-club/release/Cosmonarchy-old-1.git",
             RepoKind.Game,
             BuildDir: "Original",
@@ -61,17 +66,17 @@ public static class RepoCatalog
         ),
         new(
             "nightly",
-            "2023 Nightly Archive",
+            "Original CM — 2023 Nightly",
             "https://gitlab.com/Pr0nogo3/specialbus.git",
             RepoKind.Game,
             BuildDir: "Original",
             Variant: Variant.Original
         ),
 
-        // ---- Plus: the Plus-enabled game builds ------------------------
+        // ---- Plus: the full product (gameplay + online) ----------------
         new(
             "release",
-            "Release — Plus (My Build)",
+            "Plus — Release",
             "https://github.com/saintromuald/cosmonarchy-bw-release.git",
             RepoKind.Game,
             BuildDir: "Release",
@@ -82,7 +87,7 @@ public static class RepoCatalog
         ),
         new(
             "prerelease-mine",
-            "Prerelease — Plus (My Build)",
+            "Plus — Prerelease",
             "https://github.com/saintromuald/cosmonarchy-bw-prerelease.git",
             RepoKind.Game,
             BuildDir: "Prerelease",
@@ -92,12 +97,12 @@ public static class RepoCatalog
     ];
 
     /// <summary>Community mirror entries, hidden unless requested. They are
-    /// vanilla (Original) builds.</summary>
+    /// vanilla (Original CM) builds.</summary>
     public static IReadOnlyList<RepoEntry> Unofficial { get; } =
     [
         new(
             "luci-release",
-            "Release — Stable (Luci mirror)",
+            "Original CM — Release (Luci mirror)",
             "https://gitea.aromavir.us/lucifirius/cosmonarchy-bw-release.git",
             RepoKind.Game,
             BuildDir: "Release",
@@ -106,7 +111,7 @@ public static class RepoCatalog
         ),
         new(
             "luci-prerelease",
-            "Prerelease (Luci mirror)",
+            "Original CM — Prerelease (Luci mirror)",
             "https://gitea.aromavir.us/lucifirius/cosmonarchy-bw-prerelease.git",
             RepoKind.Game,
             BuildDir: "Prerelease",
@@ -123,13 +128,15 @@ public static class RepoCatalog
         RepoKind.Maps
     );
 
-    /// <summary>Plugin repositories: the Plus gameplay fork and the rollback
-    /// netcode. Staged as zz-cosmo-plus.qdp / zz-cosmo-rollback.qdp.</summary>
+    /// <summary>Plugin repositories: the Plus gameplay features and Plus
+    /// Netcode (the rollback online plugin). Staged as zz-cosmo-plus.qdp /
+    /// zz-cosmo-rollback.qdp. Neither is a game version; they are shared
+    /// plumbing applied automatically when a build launches.</summary>
     public static IReadOnlyList<RepoEntry> Plugins { get; } =
     [
         new(
             "plus",
-            "Cosmonarchy Plus plugin",
+            "Plus features (auto-managed)",
             "https://github.com/saintromuald/cosmonarchy-plus.git",
             RepoKind.Plugin,
             BuildDir: "zz-cosmo-plus.qdp",
@@ -137,7 +144,7 @@ public static class RepoCatalog
         ),
         new(
             "rollback",
-            "Cosmonarchy Rollback plugin",
+            "Plus Netcode",
             "https://github.com/saintromuald/cosmonarchy-rollback.git",
             RepoKind.Plugin,
             BuildDir: "zz-cosmo-rollback.qdp",
@@ -148,11 +155,12 @@ public static class RepoCatalog
     ];
 
     /// <summary>Game repositories that belong to <paramref name="variant"/>.
-    /// Netcode has no builds of its own: it stages the rollback plugin on the
-    /// Plus-enabled builds, so those are offered there too.</summary>
+    /// Original CM Netcode has no builds of its own: it arms the Plus Netcode
+    /// plugin on the vanilla (Original CM) builds, so those are offered
+    /// there too.</summary>
     public static IEnumerable<RepoEntry> GameReposFor(Variant variant, bool includeUnofficial)
     {
-        var family = variant == Variant.Netcode ? Variant.Plus : variant;
+        var family = variant == Variant.Netcode ? Variant.Original : variant;
         foreach (var repo in Official)
         {
             if (repo.Kind == RepoKind.Game && repo.Variant == family)
@@ -165,8 +173,18 @@ public static class RepoCatalog
         }
     }
 
-    public static IEnumerable<RepoEntry> PluginsFor(Variant variant) =>
-        Plugins.Where(p => p.Variant == variant);
+    /// <summary>The plugins a variant offers for install. Plus lists its
+    /// gameplay features and its netcode (online is part of Plus); Original
+    /// CM Netcode lists the netcode plugin it arms.</summary>
+    public static IEnumerable<RepoEntry> PluginsFor(Variant variant)
+    {
+        foreach (var plugin in Plugins)
+        {
+            if (plugin.Variant == variant
+                || (variant == Variant.Plus && plugin.Id == NetcodePluginId))
+                yield return plugin;
+        }
+    }
 
     /// <summary>Everything installable while the given variant is selected:
     /// its game builds first, then its plugins.</summary>

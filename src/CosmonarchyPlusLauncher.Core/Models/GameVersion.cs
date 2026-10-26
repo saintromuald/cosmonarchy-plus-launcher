@@ -51,10 +51,10 @@ public sealed class GameVersion
         Variant ?? Repo?.Variant ?? global::CosmonarchyPlusLauncher.Core.Models.Variant.Original;
 
     [JsonIgnore]
-    public string VariantLabel => EffectiveVariant.ToString();
+    public string VariantLabel => EffectiveVariant.Label();
 
     [JsonIgnore]
-    public string Badge => EffectiveVariant.ToString().ToUpperInvariant();
+    public string Badge => EffectiveVariant.BadgeText();
 
     /// <summary>One-line description for the versions list.</summary>
     [JsonIgnore]

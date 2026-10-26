@@ -75,16 +75,17 @@ public sealed class InstallService
     public async Task PlayAsync(IProgress<string>? progress = null, CancellationToken ct = default)
     {
         await InstallAsync(progress, ct);
-        // The version's own family decides the staging: an Original install
-        // never picks up the Plus plugin just because the Play page's filter
-        // was left on Plus. Plus uses its own role setting (Solo = normal
-        // play); only an explicit Host/Guest pick arms the rollback netcode,
-        // whose turn system takes over mouse and keyboard input.
+        // The version's own family decides the staging: an Original CM
+        // install never picks up the Plus plugins just because the Play
+        // page's filter was left on Plus. Plus uses its own role setting
+        // (Solo = normal offline play); only an explicit Host/Guest pick
+        // applies the Plus Netcode plugin, whose turn system takes over
+        // mouse and keyboard input.
         var (variant, role) = StagingFor(_settings, _version);
         var stager = new PluginStager(RepoDir, StageDir,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         stager.Apply(variant, role);
-        progress?.Report($"Launching {_version.Name} ({variant})");
+        progress?.Report($"Launching {_version.Name} ({variant.Label()})");
         EnsureFullscreenDisplay(progress);
         await LaunchAsync(ct);
     }
@@ -111,8 +112,8 @@ public sealed class InstallService
     }
 
     /// <summary>Copy a replay into the game's replay directory and launch
-    /// into it. Replays are played on the vanilla build (the Plus plugin is
-    /// unstaged and rollback disarmed), matching how they were recorded.</summary>
+    /// into it. Replays are played on the vanilla build (the Plus plugins are
+    /// unstaged and the netcode is removed), matching how they were recorded.</summary>
     public async Task PlayReplayAsync(string replayPath, IProgress<string>? progress = null,
         CancellationToken ct = default, bool forceCheckout = false, bool launch = true)
     {

@@ -4,7 +4,12 @@ namespace CosmonarchyPlusLauncher.Core.Services;
 
 /// <summary>Stages plugin .qdp files into the build's plugins/ directory and
 /// manages rollback arming, mirroring the variant behaviour of the original
-/// launcher's script suite (original / plus / netcode).</summary>
+/// launcher's script suite (original / plus / netcode).
+///
+/// <para><b>Plus Netcode is applied only when hosting or joining as a
+/// guest.</b> Solo play (and Original CM) runs without the rollback plugin
+/// present at all, not merely disarmed — netcode is an online-only
+/// component, never shipped inert into offline builds.</para></summary>
 public sealed class PluginStager
 {
     private readonly string _pluginsDir;
@@ -18,7 +23,8 @@ public sealed class PluginStager
         _home = home;
     }
 
-    /// <summary>Stage the given variant into plugins/.</summary>
+    /// <summary>Stage the given variant into plugins/. Host/Guest apply the
+    /// netcode plugin and arm it; Solo and Original CM leave it out.</summary>
     public void Apply(Variant variant, NetcodeRole? role)
     {
         Directory.CreateDirectory(_pluginsDir);
@@ -27,6 +33,7 @@ public sealed class PluginStager
         {
             case Variant.Original:
                 UnstagePlus();
+                UnstageRollback();
                 Disarm();
                 break;
 
@@ -38,20 +45,28 @@ public sealed class PluginStager
 
             case Variant.Plus:
                 StagePlus();
-                StageRollback();
-                // No role means a normal skirmish: the armed host/join path
-                // drives the netcode's turn system, which ignores ordinary
-                // mouse/keyboard input while it is under development. Mirrors
-                // cosmo-variant, where Solo is the default and Enter picks it.
+                // Online is part of Plus, but the netcode plugin applies only
+                // when hosting or joining as a guest. Solo never contains it:
+                // the armed host/join path drives the netcode's turn system,
+                // which ignores ordinary mouse/keyboard input while it is
+                // under development.
                 if (role is null or NetcodeRole.Solo)
+                {
+                    UnstageRollback();
                     Disarm();
+                }
                 else
+                {
+                    StageRollback();
                     Arm(role.Value);
+                }
                 break;
         }
     }
 
     public void UnstagePlus() => File.Delete(Path.Combine(_pluginsDir, "zz-cosmo-plus.qdp"));
+
+    public void UnstageRollback() => File.Delete(Path.Combine(_pluginsDir, "zz-cosmo-rollback.qdp"));
 
     /// <summary>Newest of: a local release/debug build, or a copy staged in the
     /// variants directory. Picking by mtime avoids launching an older build.</summary>
@@ -65,7 +80,7 @@ public sealed class PluginStager
                 "i686-pc-windows-msvc", "debug", "cosmo_plus.dll"),
             Path.Combine(_stageDir, "zz-cosmo-plus.qdp"),
         };
-        StageFrom("Plus", sources, "zz-cosmo-plus.qdp");
+        StageFrom("Plus features", sources, "zz-cosmo-plus.qdp");
     }
 
     public void StageRollback()
@@ -78,7 +93,7 @@ public sealed class PluginStager
                 "i686-pc-windows-msvc", "debug", "cosmo_rollback.dll"),
             Path.Combine(_stageDir, "zz-cosmo-rollback.qdp"),
         };
-        StageFrom("Rollback", sources, "zz-cosmo-rollback.qdp");
+        StageFrom("Plus Netcode", sources, "zz-cosmo-rollback.qdp");
     }
 
     private void StageFrom(string name, IEnumerable<string> sources, string targetName)

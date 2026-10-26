@@ -32,8 +32,17 @@ public sealed class VersionManager
     public IReadOnlyList<GameVersion> VersionsFor(Variant variant) =>
         Versions.Where(v => v.EffectiveVariant == variant).ToList();
 
-    public IReadOnlyList<PluginVersion> PluginsFor(Variant variant) =>
-        _settings.Plugins.Where(p => p.Variant == variant).ToList();
+    /// <summary>Installed plugins offered by a variant family. Membership
+    /// follows the catalog (Plus offers its netcode too), not the stored
+    /// variant, so an installed "Plus Netcode" record appears under both
+    /// Plus and Original CM Netcode.</summary>
+    public IReadOnlyList<PluginVersion> PluginsFor(Variant variant)
+    {
+        var offered = RepoCatalog.PluginsFor(variant)
+            .Select(r => r.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return _settings.Plugins.Where(p => offered.Contains(p.RepoId)).ToList();
+    }
 
     /// <summary>The version the play/update/delete actions act on: the
     /// persisted selection, or the first installed version as a fallback.</summary>
@@ -285,9 +294,9 @@ public sealed class VersionManager
     {
         var family = variant ?? repo.Variant;
         // Only spell the variant out when it differs from the repository's own
-        // family (a Netcode install of a Plus build), so ordinary names stay
-        // short while the list can still tell the two apart.
-        var suffix = family == repo.Variant ? "" : $" — {family}";
+        // family (an Original CM Netcode install of an Original CM build), so
+        // ordinary names stay short while the list can still tell them apart.
+        var suffix = family == repo.Variant ? "" : $" — {family.Label()}";
         return pinnedSha is null
             ? $"{repo.Name}{suffix} — Latest"
             : $"{repo.Name}{suffix} — {pinnedSha[..Math.Min(8, pinnedSha.Length)]}";
