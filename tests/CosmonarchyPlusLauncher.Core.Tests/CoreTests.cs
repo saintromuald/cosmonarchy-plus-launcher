@@ -465,6 +465,9 @@ public class CoreTests
 
             Assert.False(File.Exists(Path.Combine(plugins, "zz-cosmo-plus.qdp")));
             Assert.False(File.Exists(Path.Combine(plugins, "zz-cosmo-rollback.qdp")));
+            // The removed copy is kept in the shared stage dir so a later
+            // Host/Guest play can re-apply it.
+            Assert.True(File.Exists(Path.Combine(stage, "zz-cosmo-rollback.qdp")));
             Assert.Null(Environment.GetEnvironmentVariable("CM_ROLLBACK_LIVE"));
             Assert.Null(Environment.GetEnvironmentVariable("CM_ROLLBACK_SLOT"));
         }

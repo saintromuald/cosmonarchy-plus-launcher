@@ -66,7 +66,26 @@ public sealed class PluginStager
 
     public void UnstagePlus() => File.Delete(Path.Combine(_pluginsDir, "zz-cosmo-plus.qdp"));
 
-    public void UnstageRollback() => File.Delete(Path.Combine(_pluginsDir, "zz-cosmo-rollback.qdp"));
+    /// <summary>Remove the netcode plugin from the build (Solo and Original
+    /// CM never contain it). The existing copy is kept in the shared stage
+    /// dir rather than deleted, so the next Host/Guest play can re-apply it
+    /// even when this machine has no local build and the checkout is dirty
+    /// enough to skip the fetch/reset that would restore it.</summary>
+    public void UnstageRollback()
+    {
+        var path = Path.Combine(_pluginsDir, "zz-cosmo-rollback.qdp");
+        if (!File.Exists(path))
+            return;
+        try
+        {
+            File.Copy(path, Path.Combine(_stageDir, "zz-cosmo-rollback.qdp"), overwrite: true);
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+            // Housekeeping must never block a play; the file simply stays.
+        }
+    }
 
     /// <summary>Newest of: a local release/debug build, or a copy staged in the
     /// variants directory. Picking by mtime avoids launching an older build.</summary>
