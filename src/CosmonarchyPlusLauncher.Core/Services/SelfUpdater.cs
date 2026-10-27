@@ -115,6 +115,21 @@ public sealed class SelfUpdater
             throw new InvalidOperationException(
                 "The update archive does not contain a launcher build — the release may be broken. Nothing was changed.");
         var buildDir = Path.GetDirectoryName(stagedBinary)!;
+        // The CI tarball does not preserve the executable bit on the apphost
+        // (the manual update hit "Permission denied" on first launch), so set
+        // it before the swap: the apply script moves the whole build dir and
+        // the relaunch must be able to exec the binary.
+        try
+        {
+            File.SetUnixFileMode(stagedBinary,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        }
+        catch (IOException)
+        {
+            // Non-Unix or a filesystem without mode support: nothing to do.
+        }
 
         var script = Path.Combine(work, "apply.sh");
         File.WriteAllText(script, LinuxApplyScript, new UTF8Encoding(false));
