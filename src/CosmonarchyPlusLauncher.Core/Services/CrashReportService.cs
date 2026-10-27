@@ -25,9 +25,11 @@ public sealed class CrashReportService
 
     /// <summary>Collect the recent diagnostics into a fresh temp directory.
     /// Returns the directory path. <paramref name="note"/> is the player's
-    /// own description of the bug and opens the report summary.</summary>
+    /// own description of the bug and opens the report summary.
+    /// <paramref name="allToday"/> includes every replay and desync record
+    /// from today (the whole session) instead of only the latest few.</summary>
     public static Task<string> CollectAsync(
-        AppSettings settings, string note = "",
+        AppSettings settings, string note = "", bool allToday = false,
         IProgress<string>? progress = null, CancellationToken ct = default)
     {
         return Task.Run(() =>
@@ -93,6 +95,7 @@ public sealed class CrashReportService
             CopyCapped(launcherLog, Path.Combine(outDir, "launcher.log"));
 
             progress?.Report("Collecting the latest replays…");
+            var today = DateTime.UtcNow.Date;
             foreach (var replayDir in new[]
             {
                 Path.Combine(root, "Starcraft", "maps", "replays"),
@@ -101,9 +104,24 @@ public sealed class CrashReportService
             {
                 if (!Directory.Exists(replayDir))
                     continue;
-                foreach (var r in Directory.GetFiles(replayDir, "*.rep")
-                             .OrderByDescending(File.GetLastWriteTimeUtc).Take(4))
-                    CopyCapped(r, Path.Combine(outDir, Path.GetFileName(r)), MaxReplayBytes);
+                var replays = allToday
+                    ? Directory.GetFiles(replayDir, "*.rep")
+                        .Where(r => File.GetLastWriteTimeUtc(r).Date == today)
+                        .OrderBy(File.GetLastWriteTimeUtc)
+                    : Directory.GetFiles(replayDir, "*.rep")
+                        .OrderByDescending(File.GetLastWriteTimeUtc).Take(4);
+                foreach (var r in replays)
+                {
+                    // Replays are binary; the report repo carries text, so
+                    // store a base64 copy (decode with `base64 -d`).
+                    var bytes = File.ReadAllBytes(r);
+                    if (bytes.Length > MaxReplayBytes)
+                        bytes = bytes.AsSpan(bytes.Length - (int)MaxReplayBytes).ToArray();
+                    var text = "# replay: " + Path.GetFileName(r) + "\n" +
+                               Convert.ToBase64String(bytes) + "\n";
+                    File.WriteAllText(
+                        Path.Combine(outDir, Path.GetFileName(r) + ".b64"), text);
+                }
             }
 
             progress?.Report("Writing the report summary…");
