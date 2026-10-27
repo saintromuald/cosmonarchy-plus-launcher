@@ -245,6 +245,8 @@ public partial class PlayViewModel : ViewModelBase
         SelectedRepo = Repos.FirstOrDefault(r => r.Id == _settings.SelectedRepoId) ?? Repos.FirstOrDefault();
         ReloadInstalled();
         LoadSources(announce: false);
+        // The update banner checks on its own when the page loads.
+        _ = CheckForLauncherUpdateAsync();
     }
 
     partial void OnShowUnofficialChanged(bool value)
