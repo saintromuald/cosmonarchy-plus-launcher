@@ -104,6 +104,9 @@ jobs:
       - name: Zip payloads
         run: |
           cd dist
+          # upload-artifact zips the build, which drops the apphost's +x bit;
+          # restore it or every self-update relaunches into "Permission denied".
+          chmod +x linux/CosmonarchyPlusLauncher
           python3 -m zipfile -c CosmonarchyPlusLauncher-win-x64.zip win/
           tar -czf CosmonarchyPlusLauncher-linux-x64.tar.gz linux/
       - uses: softprops/action-gh-release@v2
