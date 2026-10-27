@@ -70,6 +70,12 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _updateStatus = "";
 
+    /// <summary>The newest released version, per the last check ("…" while
+    /// checking, "not checked" before the first check, "offline" when the
+    /// check could not reach GitHub).</summary>
+    [ObservableProperty]
+    private string _latestVersion = "not checked";
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(UpdateBarIndeterminate))]
     private bool _updateBusy;
@@ -94,6 +100,13 @@ public partial class SettingsViewModel : ViewModelBase
     private bool _canOpenRelease;
 
     private UpdateInfo? _update;
+
+    public SettingsViewModel()
+    {
+        // Populate the version display as soon as the page opens (the result
+        // lands in LatestVersion/UpdateStatus; the button re-checks on demand).
+        _ = CheckForUpdatesAsync();
+    }
 
     [RelayCommand]
     private void UnlockRemastered()
@@ -146,19 +159,23 @@ public partial class SettingsViewModel : ViewModelBase
     private async Task CheckForUpdatesAsync()
     {
         UpdateBusy = true;
+        LatestVersion = "…";
         UpdateStatus = $"Checking for updates (current: {CurrentVersion})…";
         var info = await new UpdateService().CheckAsync(CurrentVersion);
         _update = info;
         if (info is null)
         {
+            LatestVersion = "offline";
             UpdateStatus = "Could not check for updates (offline or rate-limited?).";
         }
         else if (!info.IsNewer)
         {
+            LatestVersion = info.Tag;
             UpdateStatus = $"You are on the latest version ({CurrentVersion}).";
         }
         else
         {
+            LatestVersion = info.Tag;
             var kind = SelfUpdater.GetInstallKind();
             CanInstallUpdate = info.AssetUrl is not null && kind is InstallKind.LinuxDirectory or InstallKind.WindowsSingleFile;
             UpdateStatus = CanInstallUpdate
