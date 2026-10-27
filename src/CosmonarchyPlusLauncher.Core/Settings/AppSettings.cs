@@ -50,9 +50,9 @@ public sealed class AppSettings
     public NetcodeRole? NetcodeRole { get; set; }
 
     /// <summary>Role for Plus launches. Solo is normal play (the rollback
-    /// plugin is staged but disarmed); Host/Guest arms the rollback turn
-    /// system, which ignores ordinary mouse and keyboard input while it is
-    /// under development. Defaults to Solo so a normal Play never arms.</summary>
+    /// plugin is staged but disarmed); Host/Guest arms the rollback netcode
+    /// (both players need the same build and the rollback-capable
+    /// CrownLink.snp). Defaults to Solo so a normal Play never arms.</summary>
     public NetcodeRole PlusRole { get; set; } =
         global::CosmonarchyPlusLauncher.Core.Models.NetcodeRole.Solo;
 

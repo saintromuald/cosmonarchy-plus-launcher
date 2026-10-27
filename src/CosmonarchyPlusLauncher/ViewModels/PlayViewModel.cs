@@ -212,9 +212,9 @@ public partial class PlayViewModel : ViewModelBase
     /// development, so normal play must use Solo (Plus) or avoid launching
     /// Original CM Netcode builds.</summary>
     public string RoleWarning => Variant == Variant.Plus && Role is not null and not NetcodeRole.Solo
-        ? "Warning: Host/Guest applies the Plus Netcode turn system, which takes over the mouse and keyboard (netcode testing only). Choose Solo for normal play."
+        ? "Host/Guest applies the rollback netcode: both players need the same build and the launcher-installed CrownLink (with the rollback channel). Experimental — if the match falls back to lockstep, check that both sides armed it."
         : Variant == Variant.Netcode
-            ? "Warning: Original CM Netcode runs armed — the turn system takes over the mouse and keyboard. Close the game to end the session."
+            ? "Original CM Netcode runs armed — both players must run the same build and the rollback-capable CrownLink.snp. Close the game to end the session."
             : "";
 
     public bool RoleWarningVisible => RoleWarning.Length > 0;

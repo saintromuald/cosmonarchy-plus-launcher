@@ -12,9 +12,13 @@ public static class RemoteAssets
     public const string VsRedist = "https://aka.ms/vs/17/release/vc_redist.x86.exe";
     public const string PatchManifest = "https://cosmonarchy.com/files/patches/patches.yml";
 
-    /// <summary>Upstream CrownLink SNP (the network plugin the game expects).</summary>
-    public const string CrownLinkOwner = "impromptu1583";
-    public const string CrownLinkRepo = "SNPJuice";
+    /// <summary>CrownLink SNP with the rollback channel. The fork
+    /// (`saintromuald/CrownLink`, CI workflow `build-crownlink`) adds the
+    /// `cl_rollback_*` exports the netcode plugin uses; the stock upstream SNP
+    /// (`impromptu1583/SNPJuice`) has none, so netcode matches need this build.
+    /// It is otherwise the same CrownLink (same SNP ABI, lobby and transport).</summary>
+    public const string CrownLinkOwner = "saintromuald";
+    public const string CrownLinkRepo = "CrownLink";
 }
 
 /// <summary>Downloads the CrownLink SNP from its GitHub release, caching by

@@ -79,8 +79,7 @@ public sealed class InstallService
         // install never picks up the Plus plugins just because the Play
         // page's filter was left on Plus. Plus uses its own role setting
         // (Solo = normal offline play); only an explicit Host/Guest pick
-        // applies the Plus Netcode plugin, whose turn system takes over
-        // mouse and keyboard input.
+        // arms the Plus Netcode plugin (rollback transport + turn system).
         var (variant, role) = StagingFor(_settings, _version);
         var stager = new PluginStager(RepoDir, StageDir,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
@@ -106,7 +105,7 @@ public sealed class InstallService
                 ? NetcodeRole.Guest
                 : NetcodeRole.Host),
             // Plus: Solo (default) disarms; Host/Guest arms the rollback
-            // turn system on purpose (netcode testing).
+            // netcode (rollback transport + turn system).
             _ => (variant, settings.PlusRole),
         };
     }
