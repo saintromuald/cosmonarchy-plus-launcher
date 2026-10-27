@@ -55,6 +55,8 @@
                      MinHeight="64" MaxHeight="140"
                      FontSize="13"
                      Watermark="What happened? — e.g. “we desynced at ~10 minutes; I attacked his expansion and his game crashed when he pressed Z”" />
+            <CheckBox IsChecked="{Binding ShareAllToday}"
+                      Content="Submit all of today's games (auto-checks when the game recorded desyncs today)" />
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Content="Share recent logs" Command="{Binding ShareCrashReportCommand}"
                         IsEnabled="{Binding !ReportBusy}" MinWidth="150" />
@@ -66,6 +68,20 @@
             </StackPanel>
             <TextBlock Text="{Binding ReportUrl}" IsVisible="{Binding HasReportUrl}"
                        TextWrapping="Wrap" FontSize="12" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,10,0,0">
+                <TextBox Text="{Binding FriendReportUrl}" Watermark="Friend's report link (https://github.com/…/crash-reports/…)"
+                         MinWidth="380" VerticalAlignment="Center" />
+                <Button Content="Compare with friend's report"
+                        Command="{Binding AnalyzeReportCommand}"
+                        IsEnabled="{Binding !ReportBusy}" MinWidth="190" />
+                <Button Content="Copy diagnosis" Command="{Binding CopyDiagnosisCommand}"
+                        IsEnabled="{Binding HasDiagnosis}" />
+            </StackPanel>
+            <TextBox Text="{Binding Diagnosis}" IsReadOnly="True" AcceptsReturn="True"
+                     IsVisible="{Binding HasDiagnosis}" MaxHeight="220"
+                     FontFamily="Cascadia Mono,Menlo,Consolas,monospace" FontSize="12"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
         </StackPanel>
 
         <TextBlock Grid.Row="4"

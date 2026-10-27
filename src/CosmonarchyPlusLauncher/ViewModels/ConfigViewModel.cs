@@ -85,6 +85,34 @@ public partial class ConfigViewModel : ViewModelBase
         SelectedFile = Files[0];
         ReloadVersions();
         LoadFromDisk();
+        RefreshDesyncState();
+    }
+
+    /// <summary>Scan the game's own desync records (Critical*.log) for
+    /// today's games; when the detector fired, auto-check "submit all of
+    /// today's games" so desynced sessions report whole.</summary>
+    private void RefreshDesyncState()
+    {
+        var today = DateTime.UtcNow.Date;
+        foreach (var dir in Directory.GetDirectories(_settings.RootPath,
+                     "*", SearchOption.AllDirectories)
+                     .Append(_settings.RootPath))
+        {
+            var logs = Path.Combine(dir, "logs");
+            if (!Directory.Exists(logs))
+                continue;
+            foreach (var log in Directory.GetFiles(logs, "Critical*.log"))
+            {
+                if (File.GetLastWriteTimeUtc(log).Date != today)
+                    continue;
+                if (!File.ReadAllText(log).Contains("Critical frame:", StringComparison.Ordinal))
+                    continue;
+                TodayHasDesync = true;
+                ShareAllToday = true;
+                OnPropertyChanged(nameof(TodayHasDesync));
+                return;
+            }
+        }
     }
 
     /// <summary>Re-scan the installed versions (installs/removals on the
@@ -332,6 +360,15 @@ public partial class ConfigViewModel
 
     public bool HasReportUrl => ReportUrl.Length > 0;
 
+    /// <summary>Submit every game played today (all of today's replays and
+    /// desync records) instead of only the latest few.</summary>
+    [ObservableProperty]
+    private bool _shareAllToday;
+
+    /// <summary>True when the game's own desync detector fired today —
+    /// the checkbox auto-checks itself so desynced games submit whole.</summary>
+    public bool TodayHasDesync { get; private set; }
+
     /// <summary>Collect the recent logs, crashes, replays and the note, then
     /// publish them as a public report in the community repo. The link can be
     /// sent to whoever is debugging.</summary>
@@ -345,7 +382,7 @@ public partial class ConfigViewModel
         try
         {
             var progress = new Progress<string>(s => ReportStatus = s);
-            var dir = await CrashReportService.CollectAsync(_settings, ReportNote, progress);
+            var dir = await CrashReportService.CollectAsync(_settings, ReportNote, ShareAllToday, progress);
             var token = _settings.GitHubToken;
             if (string.IsNullOrWhiteSpace(token))
             {
@@ -373,5 +410,79 @@ public partial class ConfigViewModel
     {
         if (ReportUrl.Length > 0 && AppRuntime.Clipboard is { } clipboard)
             await clipboard.SetTextAsync(ReportUrl);
+    }
+}
+
+public partial class ConfigViewModel
+{
+    [ObservableProperty]
+    private string _friendReportUrl = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDiagnosis))]
+    private string _diagnosis = "";
+
+    public bool HasDiagnosis => Diagnosis.Length > 0;
+
+    /// <summary>Collect this machine's report, download the friend's report
+    /// from the pasted link, and produce a mechanical diagnosis: build and
+    /// plugin mismatches, config differences, the game's own desync records,
+    /// and shared crash signatures.</summary>
+    [RelayCommand]
+    private async Task AnalyzeReportAsync()
+    {
+        if (ReportBusy)
+            return;
+        ReportBusy = true;
+        ReportStatus = "Collecting this machine's report…";
+        try
+        {
+            var localDir = await CrashReportService.CollectAsync(_settings, ReportNote,
+                new Progress<string>(s => ReportStatus = s));
+
+            var slug = ExtractReportSlug(FriendReportUrl);
+            if (slug.Length == 0)
+            {
+                Directory.Delete(localDir, recursive: true);
+                ReportStatus = "Paste the friend's report link first (it contains crash-reports/<timestamp>).";
+                return;
+            }
+
+            ReportStatus = "Downloading the friend's report…";
+            var remoteDir = await new ReportAnalysisService().FetchReportAsync(
+                _settings.CommunityRepo, slug);
+
+            ReportStatus = "Comparing…";
+            Diagnosis = ReportAnalysisService.Compare(localDir, remoteDir).ToMarkdown();
+            ReportStatus = "Diagnosis ready — copy it and send it wherever the fix is discussed.";
+            Directory.Delete(localDir, recursive: true);
+            Directory.Delete(remoteDir, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsLog.Error("report analysis", ex);
+            ReportStatus = $"Could not compare the reports: {ex.Message}";
+        }
+        finally
+        {
+            ReportBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task CopyDiagnosisAsync()
+    {
+        if (Diagnosis.Length > 0 && AppRuntime.Clipboard is { } clipboard)
+            await clipboard.SetTextAsync(Diagnosis);
+    }
+
+    private static string ExtractReportSlug(string url)
+    {
+        var i = url.IndexOf(CrashReportService.ReportsDirectory, StringComparison.Ordinal);
+        if (i < 0)
+            return "";
+        var rest = url[(i + CrashReportService.ReportsDirectory.Length)..].Trim('/');
+        var end = rest.IndexOfAny(new[] { '/', '?', '#' });
+        return end >= 0 ? rest[..end] : rest;
     }
 }

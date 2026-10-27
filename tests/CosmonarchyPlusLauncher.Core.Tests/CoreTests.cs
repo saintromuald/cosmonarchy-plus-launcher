@@ -2129,4 +2129,60 @@ public class CoreTests
             File.Delete(path);
         }
     }
+    [Fact]
+    public void Report_analysis_names_build_plugin_and_config_mismatches()
+    {
+        var a = Path.Combine(Path.GetTempPath(), $"cpl-rep-a-{Guid.NewGuid():N}");
+        var b = Path.Combine(Path.GetTempPath(), $"cpl-rep-b-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(a);
+        Directory.CreateDirectory(b);
+        try
+        {
+            File.WriteAllText(Path.Combine(a, "rel_build-id.txt"), "build: rel\nbranch: plus\nsha: aaa");
+            File.WriteAllText(Path.Combine(b, "rel_build-id.txt"), "build: rel\nbranch: plus\nsha: bbb");
+            File.WriteAllText(Path.Combine(a, "rel_cosmo_plus.log"), "[cosmo-plus] feature build: v0.2.0 rev=1\n");
+            File.WriteAllText(Path.Combine(b, "rel_cosmo_plus.log"), "[cosmo-plus] feature build: v0.2.0 rev=2\n");
+            File.WriteAllText(Path.Combine(a, "conf_plus.yml"), "overrides:\n  - unit: 12\n    minerals: 50\n");
+            File.WriteAllText(Path.Combine(b, "conf_plus.yml"), "overrides:\n  - unit: 12\n    minerals: 75\n");
+            File.WriteAllText(Path.Combine(a, "rel_cosmo_crash.log"),
+                "[cosmo-crash] x\n  exception=0xc0000005 addr=0x025f012d\n");
+            File.WriteAllText(Path.Combine(b, "rel_cosmo_crash.log"),
+                "[cosmo-crash] y\n  exception=0xc0000005 addr=0x025f012d\n");
+            File.WriteAllText(Path.Combine(a, "Critical 1.log"), "Critical frame: 6398\nLocal Hash: 0xA8E8\n");
+
+            var d = ReportAnalysisService.Compare(a, b);
+            Assert.Contains(d.Findings, f => f.Title.Contains("Different game builds"));
+            Assert.Contains(d.Findings, f => f.Title.Contains("Different Plus plugin builds"));
+            Assert.Contains(d.Findings, f => f.Title.Contains("conf_plus.yml differs"));
+            Assert.Contains(d.Findings, f => f.Title.Contains("same crash"));
+            Assert.Contains("mechanical differences found", d.Headline);
+        }
+        finally
+        {
+            Directory.Delete(a, recursive: true);
+            Directory.Delete(b, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Report_analysis_consistent_reports_have_no_findings()
+    {
+        var a = Path.Combine(Path.GetTempPath(), $"cpl-rep-a-{Guid.NewGuid():N}");
+        var b = Path.Combine(Path.GetTempPath(), $"cpl-rep-b-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(a);
+        Directory.CreateDirectory(b);
+        try
+        {
+            File.WriteAllText(Path.Combine(a, "rel_build-id.txt"), "build: rel\nbranch: plus\nsha: aaa");
+            File.WriteAllText(Path.Combine(b, "rel_build-id.txt"), "build: rel\nbranch: plus\nsha: aaa");
+            var d = ReportAnalysisService.Compare(a, b);
+            Assert.Empty(d.Findings);
+            Assert.Contains("no mechanical difference", d.Headline);
+        }
+        finally
+        {
+            Directory.Delete(a, recursive: true);
+            Directory.Delete(b, recursive: true);
+        }
+    }
 }
