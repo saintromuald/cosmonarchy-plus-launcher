@@ -46,7 +46,7 @@ public sealed class PluginInstallService
 
         try
         {
-            var artifact = _repo.Id == "plus"
+            var artifact = _repo.Id is "plus" or "rollback"
                 ? await FromGitHubReleaseAsync(stage, progress, ct)
                 : await FromRepositoryAsync(stage, progress, ct);
 
@@ -166,6 +166,12 @@ public sealed class PluginInstallService
                 var fileName = Path.GetFileName(entry.FullName);
                 if (!fileName.EndsWith(".qdp", StringComparison.OrdinalIgnoreCase))
                     continue;
+                // The Plus gameplay zip historically carried a stale zz-cosmo-rollback.qdp.
+                // The netcode plugin is now published from its own repo (release asset), so
+                // the Plus install must not plant an outdated copy over a newer one.
+                if (fileName.Equals("zz-cosmo-rollback.qdp", StringComparison.OrdinalIgnoreCase)
+                    && _repo.Id != "rollback")
+                    continue;
                 var target = Path.Combine(stage, fileName);
                 entry.ExtractToFile(target, overwrite: true);
                 files.Add(new PluginFile
@@ -187,9 +193,9 @@ public sealed class PluginInstallService
         }
     }
 
-    /// <summary>Rollback: clone/fetch the repository for version tracking,
-    /// then copy the .qdp it contains (or the local build, when the checked
-    /// out tree has no built plugin).</summary>
+    /// <summary>Other plugin repositories: clone/fetch the repository for version
+    /// tracking, then copy the .qdp it contains (or the local build, when the checked
+    /// out tree has no built plugin). Only used for repos without a release flow.</summary>
     private async Task<Artifact> FromRepositoryAsync(
         string stage, IProgress<string>? progress, CancellationToken ct)
     {
