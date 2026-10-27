@@ -23,6 +23,10 @@
                     <TextBlock Text="Latest version:" FontSize="15" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding LatestVersion}" FontSize="15" FontWeight="Bold"
                                VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding PrereleaseLabel}" FontSize="12"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding HasPrerelease}"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                     <TextBlock Text="{Binding UpdateHint}" FontSize="12"
                                VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="420"
                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />

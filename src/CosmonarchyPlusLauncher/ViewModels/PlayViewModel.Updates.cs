@@ -22,6 +22,17 @@ public partial class PlayViewModel
     [ObservableProperty]
     private string _latestVersion = "checking…";
 
+    /// <summary>The newest prerelease tag, or "" when no prerelease exists.
+    /// Shown beside the stable number for people who want to ride ahead.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPrerelease))]
+    [NotifyPropertyChangedFor(nameof(PrereleaseLabel))]
+    private string _latestPrerelease = "";
+
+    public bool HasPrerelease => LatestPrerelease.Length > 0;
+
+    public string PrereleaseLabel => $"prerelease: {LatestPrerelease}";
+
     /// <summary>True when a newer release exists and this install can apply
     /// it in place (directory install on Linux, single-file exe on Windows).</summary>
     [ObservableProperty]
@@ -48,14 +59,20 @@ public partial class PlayViewModel
     /// <summary>What the button offers, beside the latest version text.</summary>
     public string UpdateHint => UpdateAvailable
         ? $"An update is available — you are on {LauncherVersion}."
-        : UpdateStatus.Length > 0
-            ? UpdateStatus
-            : "";
+        : LatestVersion.Length > 0 && LatestVersion != "checking…" && LatestVersion != "offline"
+            ? (LauncherVersion == LatestVersion
+                ? "You are on the latest version"
+                : $"Newer than the latest stable — you are on {LauncherVersion}.")
+            : UpdateStatus.Length > 0
+                ? UpdateStatus
+                : "";
 
     private UpdateInfo? _playUpdate;
 
     partial void OnUpdateStatusChanged(string value) => OnPropertyChanged(nameof(UpdateHint));
     partial void OnUpdateAvailableChanged(bool value) => OnPropertyChanged(nameof(UpdateHint));
+    partial void OnLatestVersionChanged(string value) => OnPropertyChanged(nameof(UpdateHint));
+    partial void OnLatestPrereleaseChanged(string value) => OnPropertyChanged(nameof(UpdateHint));
 
     [RelayCommand]
     private async Task CheckForLauncherUpdateAsync()
@@ -63,31 +80,39 @@ public partial class PlayViewModel
         UpdateBusy = true;
         LatestVersion = "checking…";
         UpdateStatus = $"Checking for updates (you are on {LauncherVersion})…";
-        var info = await new UpdateService().CheckAsync(LauncherVersion);
+        var service = new UpdateService();
+        // The two channels, for the version display (stable is what "latest"
+        // means for the update decision; the prerelease rides alongside).
+        var versions = await service.GetVersionsAsync();
+        if (versions is not null)
+        {
+            LatestVersion = versions.LatestReleaseTag ?? "none";
+            LatestPrerelease = versions.LatestPrereleaseTag ?? "";
+        }
+        var info = await service.CheckAsync(LauncherVersion);
         _playUpdate = info;
         if (info is null)
         {
-            LatestVersion = "offline";
+            if (versions is null)
+            {
+                LatestVersion = "offline";
+                UpdateStatus = "Could not check for updates (offline or rate-limited?).";
+            }
             UpdateAvailable = false;
-            UpdateStatus = "Could not check for updates (offline or rate-limited?).";
+        }
+        else if (!info.IsNewer)
+        {
+            UpdateAvailable = false;
+            UpdateStatus = $"You are on the latest version ({LauncherVersion}).";
         }
         else
         {
-            LatestVersion = info.Tag;
-            if (!info.IsNewer)
-            {
-                UpdateAvailable = false;
-                UpdateStatus = $"You are on the latest version ({LauncherVersion}).";
-            }
-            else
-            {
-                var kind = SelfUpdater.GetInstallKind();
-                UpdateAvailable = info.AssetUrl is not null
-                    && kind is InstallKind.LinuxDirectory or InstallKind.WindowsSingleFile;
-                UpdateStatus = UpdateAvailable
-                    ? $"Version {info.Tag} is available ({info.AssetName}). Install it right here — the launcher restarts itself."
-                    : $"Version {info.Tag} is available, but this install updates elsewhere (AppImage or package manager) — use the release page.";
-            }
+            var kind = SelfUpdater.GetInstallKind();
+            UpdateAvailable = info.AssetUrl is not null
+                && kind is InstallKind.LinuxDirectory or InstallKind.WindowsSingleFile;
+            UpdateStatus = UpdateAvailable
+                ? $"Version {info.Tag} is available ({info.AssetName}). Install it right here — the launcher restarts itself."
+                : $"Version {info.Tag} is available, but this install updates elsewhere (AppImage or package manager) — use the release page.";
         }
         UpdateBusy = false;
     }

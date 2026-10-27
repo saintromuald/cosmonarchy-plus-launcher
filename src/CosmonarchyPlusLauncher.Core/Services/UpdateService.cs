@@ -11,6 +11,11 @@ public sealed record UpdateInfo(
     string? AssetUrl,
     string? AssetName);
 
+/// <summary>Both update channels at once: the latest stable release and the
+/// latest prerelease (so the UI can show both numbers and say whether the
+/// running build is the newest).</summary>
+public sealed record LauncherVersions(string? LatestReleaseTag, string? LatestPrereleaseTag);
+
 /// <summary>Self-update check against this project's GitHub Releases.
 /// The CI attaches per-platform assets to every tagged release:
 /// <c>CosmonarchyPlusLauncher-linux-x64.tar.gz</c> (self-contained directory
@@ -44,6 +49,41 @@ public sealed class UpdateService
         catch
         {
             return null; // offline or rate-limited: not an error state
+        }
+    }
+
+    /// <summary>The latest stable and prerelease tags (v-less), or null when
+    /// GitHub could not be reached. The stable number is what "are we on the
+    /// latest version" compares against; the prerelease number is shown for
+    /// people who want to ride ahead of stable.</summary>
+    public async Task<LauncherVersions?> GetVersionsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var releases = await Client.Repository.Release.GetAll(Owner, Repo);
+            string? stable = null;
+            string? pre = null;
+            foreach (var release in releases)
+            {
+                if (release.Draft)
+                    continue;
+                var tag = release.TagName.TrimStart('v', 'V');
+                if (release.Prerelease)
+                {
+                    if (pre is null || CompareVersions(tag, pre) > 0)
+                        pre = tag;
+                }
+                else
+                {
+                    if (stable is null || CompareVersions(tag, stable) > 0)
+                        stable = tag;
+                }
+            }
+            return new LauncherVersions(stable, pre);
+        }
+        catch
+        {
+            return null;
         }
     }
 

@@ -76,6 +76,16 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _latestVersion = "not checked";
 
+    /// <summary>The newest prerelease tag, or "" when none exists.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPrerelease))]
+    [NotifyPropertyChangedFor(nameof(PrereleaseLabel))]
+    private string _latestPrerelease = "";
+
+    public bool HasPrerelease => LatestPrerelease.Length > 0;
+
+    public string PrereleaseLabel => $"prerelease: {LatestPrerelease}";
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(UpdateBarIndeterminate))]
     private bool _updateBusy;
@@ -161,21 +171,29 @@ public partial class SettingsViewModel : ViewModelBase
         UpdateBusy = true;
         LatestVersion = "…";
         UpdateStatus = $"Checking for updates (current: {CurrentVersion})…";
-        var info = await new UpdateService().CheckAsync(CurrentVersion);
+        var service = new UpdateService();
+        var versions = await service.GetVersionsAsync();
+        if (versions is not null)
+        {
+            LatestVersion = versions.LatestReleaseTag ?? "none";
+            LatestPrerelease = versions.LatestPrereleaseTag ?? "";
+        }
+        var info = await service.CheckAsync(CurrentVersion);
         _update = info;
         if (info is null)
         {
-            LatestVersion = "offline";
-            UpdateStatus = "Could not check for updates (offline or rate-limited?).";
+            if (versions is null)
+            {
+                LatestVersion = "offline";
+                UpdateStatus = "Could not check for updates (offline or rate-limited?).";
+            }
         }
         else if (!info.IsNewer)
         {
-            LatestVersion = info.Tag;
             UpdateStatus = $"You are on the latest version ({CurrentVersion}).";
         }
         else
         {
-            LatestVersion = info.Tag;
             var kind = SelfUpdater.GetInstallKind();
             CanInstallUpdate = info.AssetUrl is not null && kind is InstallKind.LinuxDirectory or InstallKind.WindowsSingleFile;
             UpdateStatus = CanInstallUpdate
