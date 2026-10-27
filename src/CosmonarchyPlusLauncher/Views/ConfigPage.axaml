@@ -7,7 +7,7 @@
              x:Class="CosmonarchyPlusLauncher.Views.ConfigPage"
              x:DataType="vm:ConfigViewModel">
 
-    <Grid Margin="16" RowDefinitions="Auto,Auto,*,Auto">
+    <Grid Margin="16" RowDefinitions="Auto,Auto,*,Auto,Auto">
 
         <TextBlock Grid.Row="0" Text="Config" FontSize="20" FontWeight="SemiBold" />
 
@@ -45,7 +45,30 @@
                  IsEnabled="{Binding CanEdit}"
                  Watermark="No config file here yet — Save creates it." />
 
-        <TextBlock Grid.Row="3"
+        <!-- Bug reports: describe + share the recent logs as a public link. -->
+        <StackPanel Grid.Row="3" Margin="0,14,0,0" Spacing="6">
+            <TextBlock Text="Bug reports" FontWeight="SemiBold" />
+            <TextBlock Text="Describe what happened, then share it: the most recent game logs, crash captures, replays and build info are published as a public link you can send to whoever is debugging."
+                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                       TextWrapping="Wrap" />
+            <TextBox Text="{Binding ReportNote}" AcceptsReturn="True" TextWrapping="Wrap"
+                     MinHeight="64" MaxHeight="140"
+                     FontSize="13"
+                     Watermark="What happened? — e.g. “we desynced at ~10 minutes; I attacked his expansion and his game crashed when he pressed Z”" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Share recent logs" Command="{Binding ShareCrashReportCommand}"
+                        IsEnabled="{Binding !ReportBusy}" MinWidth="150" />
+                <Button Content="Copy link" Command="{Binding CopyReportUrlCommand}"
+                        IsEnabled="{Binding HasReportUrl}" />
+                <TextBlock Text="{Binding ReportStatus}" VerticalAlignment="Center"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+            </StackPanel>
+            <TextBlock Text="{Binding ReportUrl}" IsVisible="{Binding HasReportUrl}"
+                       TextWrapping="Wrap" FontSize="12" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="4"
                    Text="cosmonarchy.yml is the game's own config (hotkeys, random races, UI toggles, player colors, replay and map settings) and lives next to StarCraft.exe, shared by every installed version — close the game before editing, it rewrites the file on exit. plus.yml and cosmo_plus.conf are the Plus plugin's files, read from the selected version's checkout (game directory first, then plugins/). Save refuses invalid YAML so a typo cannot break the config parser."
                    Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                    Margin="0,10,0,0" TextWrapping="Wrap" />

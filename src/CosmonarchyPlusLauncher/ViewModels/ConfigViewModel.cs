@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Input.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CosmonarchyPlusLauncher.Core.Models;
@@ -308,5 +309,69 @@ public partial class ConfigViewModel : ViewModelBase
             # Mode switch (explicit; overrides the lobby game type):
             # mode: antimeta
             """;
+    }
+}
+
+// ---- Bug reports -----------------------------------------------------------
+
+public partial class ConfigViewModel
+{
+    /// <summary>The player's own description of the bug — it opens the report.</summary>
+    [ObservableProperty]
+    private string _reportNote = "";
+
+    [ObservableProperty]
+    private bool _reportBusy;
+
+    [ObservableProperty]
+    private string _reportStatus = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasReportUrl))]
+    private string _reportUrl = "";
+
+    public bool HasReportUrl => ReportUrl.Length > 0;
+
+    /// <summary>Collect the recent logs, crashes, replays and the note, then
+    /// publish them as a public report in the community repo. The link can be
+    /// sent to whoever is debugging.</summary>
+    [RelayCommand]
+    private async Task ShareCrashReportAsync()
+    {
+        if (ReportBusy)
+            return;
+        ReportBusy = true;
+        ReportStatus = "Collecting the recent logs and replays…";
+        try
+        {
+            var progress = new Progress<string>(s => ReportStatus = s);
+            var dir = await CrashReportService.CollectAsync(_settings, ReportNote, progress);
+            var token = _settings.GitHubToken;
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                ReportStatus = "To share a report, add a GitHub token in Settings — the same fine-grained token the community publishing uses (Contents: read and write on the community repo).";
+                Directory.Delete(dir, recursive: true);
+                return;
+            }
+            ReportStatus = "Publishing the report…";
+            ReportUrl = await CrashReportService.PublishAsync(_settings.CommunityRepo, token, dir, progress);
+            ReportStatus = "Report published — copy the link and send it to whoever is debugging.";
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsLog.Error("crash report", ex);
+            ReportStatus = $"Could not share the report: {ex.Message}";
+        }
+        finally
+        {
+            ReportBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task CopyReportUrlAsync()
+    {
+        if (ReportUrl.Length > 0 && AppRuntime.Clipboard is { } clipboard)
+            await clipboard.SetTextAsync(ReportUrl);
     }
 }
