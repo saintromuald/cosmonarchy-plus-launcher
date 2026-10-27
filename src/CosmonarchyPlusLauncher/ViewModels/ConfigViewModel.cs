@@ -437,7 +437,7 @@ public partial class ConfigViewModel
         ReportStatus = "Collecting this machine's report…";
         try
         {
-            var localDir = await CrashReportService.CollectAsync(_settings, ReportNote,
+            var localDir = await CrashReportService.CollectAsync(_settings, ReportNote, ShareAllToday,
                 new Progress<string>(s => ReportStatus = s));
 
             var slug = ExtractReportSlug(FriendReportUrl);
