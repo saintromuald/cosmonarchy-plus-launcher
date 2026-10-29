@@ -445,6 +445,59 @@ public class CoreTests
     }
 
     [Fact]
+    public void PluginStager_managed_source_beats_newer_bundled_target()
+    {
+        // The checkout-stamp regression: git checkout stamps files with
+        // "now", so the bundled plugin can look NEWER than the managed
+        // variants copy while being stale. Managed sources must win anyway.
+        var tmp = Path.Combine(Path.GetTempPath(), $"cpl-stage-{Guid.NewGuid():N}");
+        var build = Path.Combine(tmp, "Release");
+        var plugins = Path.Combine(build, "plugins");
+        var stage = Path.Combine(tmp, "variants");
+        Directory.CreateDirectory(plugins);
+        Directory.CreateDirectory(stage);
+
+        var bundled = Path.Combine(plugins, "zz-cosmo-plus.qdp");
+        File.WriteAllText(bundled, "stale-bundled");
+        File.SetLastWriteTimeUtc(bundled, DateTime.UtcNow.AddHours(1)); // checkout-stamped "newer"
+        var managed = Path.Combine(stage, "zz-cosmo-plus.qdp");
+        File.WriteAllText(managed, "fresh-managed");
+        File.SetLastWriteTimeUtc(managed, DateTime.UtcNow.AddHours(-1)); // genuinely older
+
+        try
+        {
+            var stager = new PluginStager(build, stage, Path.Combine(tmp, "home"));
+            stager.Apply(Variant.Plus, NetcodeRole.Solo);
+
+            Assert.Equal("fresh-managed", File.ReadAllText(bundled));
+        }
+        finally
+        {
+            Directory.Delete(tmp, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TempMpq_tree_newer_detection()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"cpl-mpq-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(tmp, "mpq", "sub"));
+        var f = Path.Combine(tmp, "mpq", "sub", "file.bin");
+        File.WriteAllText(f, "x");
+        try
+        {
+            File.SetLastWriteTimeUtc(f, DateTime.UtcNow.AddMinutes(1));
+            Assert.True(InstallService.TreeNewerThan(Path.Combine(tmp, "mpq"), DateTime.UtcNow.AddSeconds(-30)));
+            File.SetLastWriteTimeUtc(f, DateTime.UtcNow.AddMinutes(-1));
+            Assert.False(InstallService.TreeNewerThan(Path.Combine(tmp, "mpq"), DateTime.UtcNow));
+        }
+        finally
+        {
+            Directory.Delete(tmp, recursive: true);
+        }
+    }
+
+    [Fact]
     public void PluginStager_original_variant_removes_plugins_and_disarms()
     {
         var tmp = Path.Combine(Path.GetTempPath(), $"cpl-stage-{Guid.NewGuid():N}");
