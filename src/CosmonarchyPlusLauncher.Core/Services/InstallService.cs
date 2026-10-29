@@ -69,7 +69,7 @@ public sealed class InstallService
     {
         await EnsureBaseAsync(progress, ct);
         await EnsureVersionAsync(progress, ct, forceCheckout);
-        HealTempMpq(progress);
+        await EnsureTempMpqAsync(progress, ct);
     }
 
     public async Task PlayAsync(IProgress<string>? progress = null, CancellationToken ct = default)
@@ -295,21 +295,149 @@ public sealed class InstallService
             "\n[Software\\\\Wine\\\\DllOverrides] 1759553452\n\"ddraw\"=\"native,builtin\"\n");
     }
 
-    /// <summary>Heal a truncated temp.mpq left by an interrupted hotloader
-    /// rebuild: it is removed so the game rebuilds it on this launch (black
-    /// screen for about a minute while it packs).</summary>
-    private void HealTempMpq(IProgress<string>? progress)
+    /// <summary>Ensure the game data archive exists, is complete and is not
+    /// older than the extracted tree.
+    ///
+    /// The game's hotloader rebuilds temp.mpq (~1 GB) at startup whenever the
+    /// archive is missing, truncated, or older than the extracted data tree
+    /// — a black-screen minute. A fresh install (or a version update, whose
+    /// git reset rewrites tree files) therefore boots "dead": "Failed loading
+    /// mpq temp.mpq" in hotloader.log, then an error about missing files.
+    ///
+    /// The original launcher built the archive during install; this does the
+    /// same: when a rebuild is needed, the game is started once, this waits
+    /// for the archive to reach a complete, stable size, and the process is
+    /// killed again. Play afterwards starts instantly. On a machine that
+    /// cannot run the game headlessly the game simply boots with its normal
+    /// first-run black screen instead.</summary>
+    private async Task EnsureTempMpqAsync(IProgress<string>? progress, CancellationToken ct)
     {
         var mpq = Path.Combine(RepoDir, "temp.mpq");
-        if (!File.Exists(mpq))
-            return;
         var tree = Path.Combine(RepoDir, "mpq");
-        if (TempMpqChecker.IsComplete(mpq, tree))
-            return;
+        if (!Directory.Exists(tree))
+            return; // nothing to pack; the game has no data tree here
 
-        File.Delete(mpq);
-        progress?.Report(
-            "Removed incomplete temp.mpq; the game rebuilds it now (black screen for about a minute — let it finish).");
+        if (File.Exists(mpq)
+            && TempMpqChecker.IsComplete(mpq, tree)
+            && !TreeNewerThan(tree, File.GetLastWriteTimeUtc(mpq)))
+        {
+            return; // complete and current
+        }
+
+        if (File.Exists(mpq))
+            File.Delete(mpq);
+
+        progress?.Report("Building game data (temp.mpq) — a black game window opens for about a minute, then closes; let it finish");
+
+        var proc = CreateGameProcess();
+        try
+        {
+            proc.Start();
+        }
+        catch (Exception e)
+        {
+            progress?.Report($"Game data build could not start ({e.Message}); the game will rebuild it on first launch (black screen for about a minute)");
+            return;
+        }
+
+        try
+        {
+            var built = await WaitForTempMpqAsync(mpq, tree, progress, ct);
+            if (built)
+                progress?.Report("Game data built; starting");
+            else
+                progress?.Report("Game data build timed out; the game will retry it on launch (black screen for about a minute)");
+        }
+        finally
+        {
+            try
+            {
+                if (!proc.HasExited)
+                    proc.Kill(entireProcessTree: true);
+                proc.Dispose();
+            }
+            catch
+            {
+                // Housekeeping: never block install/play on a failed kill.
+            }
+        }
+    }
+
+    /// <summary>True when the newest file of the extracted tree is newer than
+    /// <paramref name="mpqTime"/> (a version update touched the data, so the
+    /// archive must be rebuilt).</summary>
+    internal static bool TreeNewerThan(string tree, DateTime mpqTime)
+    {
+        DateTime newest = default;
+        foreach (var path in Directory.EnumerateFiles(tree, "*", SearchOption.AllDirectories))
+        {
+            var t = File.GetLastWriteTimeUtc(path);
+            if (t > newest)
+                newest = t;
+        }
+        return newest > mpqTime;
+    }
+
+    /// <summary>Poll for the rebuilt archive: it must exist, parse as complete
+    /// against the tree, and hold a stable size across two consecutive polls
+    /// (the writer stops before the game continues). Up to six minutes — the
+    /// pack takes about one.</summary>
+    private async Task<bool> WaitForTempMpqAsync(string mpq, string tree, IProgress<string>? progress, CancellationToken ct)
+    {
+        const long MinSize = 100_000_000;
+        long last = -1;
+        var stable = 0;
+        var deadline = DateTime.UtcNow.AddMinutes(6);
+        while (DateTime.UtcNow < deadline)
+        {
+            ct.ThrowIfCancellationRequested();
+            await Task.Delay(2000, ct);
+            if (!File.Exists(mpq))
+                continue;
+            var info = new FileInfo(mpq);
+            if (info.Length < MinSize)
+                continue;
+            if (info.Length == last)
+            {
+                if (++stable >= 2 && TempMpqChecker.IsComplete(mpq, tree))
+                    return true;
+            }
+            else
+            {
+                stable = 0;
+            }
+            last = info.Length;
+        }
+        return false;
+    }
+
+    /// <summary>The configured game process (same invocation as Play).</summary>
+    private Process CreateGameProcess()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return new Process
+            {
+                StartInfo = new ProcessStartInfo(GameExe)
+                {
+                    WorkingDirectory = RepoDir,
+                    UseShellExecute = false,
+                },
+            };
+        }
+
+        var exe = $@"C:\Cosmonarchy\{_version.Dir.Replace('/', '\\')}\Cosmonarchy BW.exe";
+        var startInfo = new ProcessStartInfo("umu-run")
+        {
+            WorkingDirectory = RepoDir,
+            UseShellExecute = false,
+            ArgumentList = { exe },
+        };
+        startInfo.Environment["WINEPREFIX"] = Path.Combine(_settings.LinuxPrefixRoot, "prefix");
+        startInfo.Environment["PROTONPATH"] = "GE-Proton";
+        startInfo.Environment["GAMEID"] = $"umu-cosmonarchy-{ChannelName(_version.Dir)}";
+        startInfo.Environment["PROTON_VERB"] = "waitforexitandrun";
+        return new Process { StartInfo = startInfo };
     }
 
     /// <summary>Force fullscreen for Play launches. cnc-ddraw reads ddraw.ini
@@ -344,23 +472,9 @@ public sealed class InstallService
             return;
         }
 
-        var exe = $@"C:\Cosmonarchy\{_version.Dir.Replace('/', '\\')}\Cosmonarchy BW.exe";
-        var startInfo = new ProcessStartInfo("umu-run")
-        {
-            WorkingDirectory = RepoDir,
-            UseShellExecute = false,
-            ArgumentList = { exe },
-        };
+        var game = CreateGameProcess();
         if (replayPath is not null)
-            startInfo.ArgumentList.Add(ToWindowsPath(replayPath));
-        startInfo.Environment["WINEPREFIX"] = Path.Combine(_settings.LinuxPrefixRoot, "prefix");
-        startInfo.Environment["PROTONPATH"] = "GE-Proton";
-        // The channel name (Release/Prerelease/Original) mirrors cosmo-variant
-        // and cosmo-watch. A GAMEID that does not match the channel's casing
-        // makes umu/proton treat the game as a different title, which ended
-        // the session cleanly after ~30 seconds.
-        startInfo.Environment["GAMEID"] = $"umu-cosmonarchy-{ChannelName(_version.Dir)}";
-        startInfo.Environment["PROTON_VERB"] = "waitforexitandrun";
+            game.StartInfo.ArgumentList.Add(ToWindowsPath(replayPath));
 
         // Docked play: a scale-2 handheld panel + scale-1 external monitor mix
         // into one Xwayland layout that the game miscomputes (broken window
@@ -368,7 +482,7 @@ public sealed class InstallService
         // seam). With the panel disabled the game sees one clean screen, the
         // same workaround cosmo-variant applies for the script launchers.
         var panel = DisablePanelForDockedPlay();
-        var game = Process.Start(startInfo);
+        game.Start();
         // Restore the panel when the game exits, without keeping the Play
         // flow busy: the launcher stays usable while the game runs.
         if (panel is not null)

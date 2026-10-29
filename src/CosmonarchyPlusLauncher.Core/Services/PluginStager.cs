@@ -88,10 +88,13 @@ public sealed class PluginStager
     }
 
     /// <summary>Newest of: a local release/debug build, or a copy staged in the
-    /// variants directory. Picking by mtime avoids launching an older build.</summary>
+    /// variants directory. A managed source (local build or variants copy)
+    /// always wins over the checkout's bundled plugin — git checkout stamps
+    /// files with "now", so a mtime comparison would keep a stale bundled
+    /// plugin over a freshly built one and ship old code to the game.</summary>
     public void StagePlus()
     {
-        var sources = new[]
+        var managed = new[]
         {
             Path.Combine(_home, "Projects", "cosmonarchy-plus", "plus", "target",
                 "i686-pc-windows-msvc", "release", "cosmo_plus.dll"),
@@ -99,12 +102,12 @@ public sealed class PluginStager
                 "i686-pc-windows-msvc", "debug", "cosmo_plus.dll"),
             Path.Combine(_stageDir, "zz-cosmo-plus.qdp"),
         };
-        StageFrom("Plus features", sources, "zz-cosmo-plus.qdp");
+        StageManaged(managed, "Plus features", "zz-cosmo-plus.qdp");
     }
 
     public void StageRollback()
     {
-        var sources = new[]
+        var managed = new[]
         {
             Path.Combine(_home, "Projects", "cosmonarchy-rollback", "target",
                 "i686-pc-windows-msvc", "release", "cosmo_rollback.dll"),
@@ -112,31 +115,29 @@ public sealed class PluginStager
                 "i686-pc-windows-msvc", "debug", "cosmo_rollback.dll"),
             Path.Combine(_stageDir, "zz-cosmo-rollback.qdp"),
         };
-        StageFrom("Plus Netcode", sources, "zz-cosmo-rollback.qdp");
+        StageManaged(managed, "Plus Netcode", "zz-cosmo-rollback.qdp");
     }
 
-    private void StageFrom(string name, IEnumerable<string> sources, string targetName)
+    /// <summary>Copy the first existing managed source to the build. Managed
+    /// sources express explicit user/dev intent (a fresh local build, or a
+    /// plugin package installed through the launcher), so they always
+    /// overwrite the checkout's bundled plugin — regardless of mtimes, which
+    /// git resets make meaningless. Only when no managed source exists does
+    /// the checkout's bundled plugin stand.</summary>
+    private void StageManaged(IEnumerable<string> sources, string name, string targetName)
     {
         var target = Path.Combine(_pluginsDir, targetName);
-        string? best = null;
         foreach (var src in sources)
         {
             if (!File.Exists(src))
                 continue;
-            if (best is null || File.GetLastWriteTimeUtc(src) > File.GetLastWriteTimeUtc(best))
-                best = src;
+            File.Copy(src, target, overwrite: true);
+            return;
         }
 
-        if (best is null)
-        {
-            if (!File.Exists(target))
-                throw new InvalidOperationException(
-                    $"No {name} plugin found: build it, or put a copy in {_stageDir}/{targetName}");
-            return; // already staged, keep it
-        }
-
-        if (!File.Exists(target) || File.GetLastWriteTimeUtc(best) > File.GetLastWriteTimeUtc(target))
-            File.Copy(best, target, overwrite: true);
+        if (!File.Exists(target))
+            throw new InvalidOperationException(
+                $"No {name} plugin found: build it, or put a copy in {_stageDir}/{targetName}");
     }
 
     /// <summary>Arm the rollback plugin for the given slot. On Linux the
