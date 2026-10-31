@@ -7,7 +7,7 @@ using CosmonarchyPlusLauncher.Core.Services;
 namespace CosmonarchyPlusLauncher.ViewModels;
 
 /// <summary>The Play page's launcher self-update section: a prominent
-/// "Update Cosmonarchy Launcher" button beside the latest released version.
+/// "Install Update" button beside the latest released version.
 /// Mirrors the Settings page's updater (the self-update is the same
 /// `UpdateService`/`SelfUpdater` pair); the Play tab is where it is most
 /// likely to be noticed.</summary>
@@ -33,10 +33,33 @@ public partial class PlayViewModel
 
     public string PrereleaseLabel => $"prerelease: {LatestPrerelease}";
 
-    /// <summary>True when a newer release exists and this install can apply
-    /// it in place (directory install on Linux, single-file exe on Windows).</summary>
+    /// <summary>True when a newer release exists than the one running. This
+    /// is what shows and enables the install button; when the install cannot
+    /// replace itself the button downloads the platform asset instead
+    /// (see <see cref="CanInstallInPlace"/> and <see cref="InstallLabel"/>).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(InstallLabel))]
+    [NotifyPropertyChangedFor(nameof(CanOpenReleasePage))]
     private bool _updateAvailable;
+
+    /// <summary>True when this install can apply the update in place
+    /// (directory install on Linux, single-file exe on Windows).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(InstallLabel))]
+    [NotifyPropertyChangedFor(nameof(UpdateHint))]
+    private bool _canInstallInPlace;
+
+    /// <summary>What the big button says: it installs in place when the
+    /// install kind allows it, and downloads the asset to the Downloads
+    /// folder otherwise.</summary>
+    public string InstallLabel => CanInstallInPlace || !UpdateAvailable
+        ? "Install Update"
+        : "Download Update";
+
+    /// <summary>The release page is the escape hatch whenever the banner has
+    /// something to say: an update exists, or the check could not reach
+    /// GitHub at all.</summary>
+    public bool CanOpenReleasePage => UpdateAvailable || LatestVersion == "offline";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(UpdateBarIndeterminate))]
@@ -56,9 +79,11 @@ public partial class PlayViewModel
     [ObservableProperty]
     private string _updateStatus = "";
 
-    /// <summary>What the button offers, beside the latest version text.</summary>
+    /// <summary>What the banner text offers, beside the latest version text.</summary>
     public string UpdateHint => UpdateAvailable
-        ? $"An update is available — you are on {LauncherVersion}."
+        ? (CanInstallInPlace
+            ? $"An update is available — you are on {LauncherVersion}."
+            : UpdateStatus)
         : LatestVersion.Length > 0 && LatestVersion != "checking…" && LatestVersion != "offline"
             ? (LauncherVersion == LatestVersion
                 ? "You are on the latest version"
@@ -71,50 +96,71 @@ public partial class PlayViewModel
 
     partial void OnUpdateStatusChanged(string value) => OnPropertyChanged(nameof(UpdateHint));
     partial void OnUpdateAvailableChanged(bool value) => OnPropertyChanged(nameof(UpdateHint));
-    partial void OnLatestVersionChanged(string value) => OnPropertyChanged(nameof(UpdateHint));
+    partial void OnLatestVersionChanged(string value)
+    {
+        OnPropertyChanged(nameof(UpdateHint));
+        OnPropertyChanged(nameof(CanOpenReleasePage));
+    }
     partial void OnLatestPrereleaseChanged(string value) => OnPropertyChanged(nameof(UpdateHint));
 
     [RelayCommand]
     private async Task CheckForLauncherUpdateAsync()
     {
+        // Transient GitHub failures (rate limits, dropped connections) used
+        // to leave the banner stuck on "offline" with no install button at
+        // all. Retry a couple of times before giving up so the banner heals
+        // itself without a manual "Check now".
         UpdateBusy = true;
-        LatestVersion = "checking…";
-        UpdateStatus = $"Checking for updates (you are on {LauncherVersion})…";
-        var service = new UpdateService();
-        // The two channels, for the version display (stable is what "latest"
-        // means for the update decision; the prerelease rides alongside).
-        var versions = await service.GetVersionsAsync();
-        if (versions is not null)
+        for (var attempt = 1; ; attempt++)
         {
-            LatestVersion = versions.LatestReleaseTag ?? "none";
-            LatestPrerelease = versions.LatestPrereleaseTag ?? "";
-        }
-        var info = await service.CheckAsync(LauncherVersion);
-        _playUpdate = info;
-        if (info is null)
-        {
-            if (versions is null)
+            LatestVersion = "checking…";
+            UpdateStatus = $"Checking for updates (you are on {LauncherVersion})…";
+            var service = new UpdateService();
+            // The two channels, for the version display (stable is what "latest"
+            // means for the update decision; the prerelease rides alongside).
+            var versions = await service.GetVersionsAsync();
+            if (versions is not null)
             {
-                LatestVersion = "offline";
-                UpdateStatus = "Could not check for updates (offline or rate-limited?).";
+                LatestVersion = versions.LatestReleaseTag ?? "none";
+                LatestPrerelease = versions.LatestPrereleaseTag ?? "";
             }
-            UpdateAvailable = false;
+            var info = await service.CheckAsync(LauncherVersion);
+            _playUpdate = info;
+            if (info is null)
+            {
+                UpdateAvailable = false;
+                CanInstallInPlace = false;
+                if (attempt < 3)
+                {
+                    UpdateStatus = $"Could not check for updates (offline or rate-limited?) — retrying ({attempt}/3)…";
+                    await Task.Delay(TimeSpan.FromSeconds(20));
+                    continue;
+                }
+                if (versions is null)
+                    LatestVersion = "offline";
+                UpdateStatus = "Could not check for updates (offline or rate-limited?) — use the release page.";
+            }
+            else if (!info.IsNewer)
+            {
+                UpdateAvailable = false;
+                CanInstallInPlace = false;
+                UpdateStatus = $"You are on the latest version ({LauncherVersion}).";
+            }
+            else
+            {
+                var kind = SelfUpdater.GetInstallKind();
+                UpdateAvailable = true;
+                CanInstallInPlace = info.AssetUrl is not null
+                    && kind is InstallKind.LinuxDirectory or InstallKind.WindowsSingleFile;
+                UpdateStatus = CanInstallInPlace
+                    ? $"Version {info.Tag} is available ({info.AssetName}). Install it right here — the launcher restarts itself."
+                    : info.AssetUrl is null
+                        ? $"Version {info.Tag} is available, but this release has no file for this platform — use the release page."
+                        : $"Version {info.Tag} is available. This install updates elsewhere (AppImage or package manager) — the button downloads {info.AssetName} to your Downloads folder.";
+            }
+            UpdateBusy = false;
+            return;
         }
-        else if (!info.IsNewer)
-        {
-            UpdateAvailable = false;
-            UpdateStatus = $"You are on the latest version ({LauncherVersion}).";
-        }
-        else
-        {
-            var kind = SelfUpdater.GetInstallKind();
-            UpdateAvailable = info.AssetUrl is not null
-                && kind is InstallKind.LinuxDirectory or InstallKind.WindowsSingleFile;
-            UpdateStatus = UpdateAvailable
-                ? $"Version {info.Tag} is available ({info.AssetName}). Install it right here — the launcher restarts itself."
-                : $"Version {info.Tag} is available, but this install updates elsewhere (AppImage or package manager) — use the release page.";
-        }
-        UpdateBusy = false;
     }
 
     [RelayCommand]
@@ -122,6 +168,11 @@ public partial class PlayViewModel
     {
         if (_playUpdate is not { IsNewer: true } info || !UpdateAvailable)
             return;
+        if (!CanInstallInPlace)
+        {
+            await DownloadLauncherUpdateAsync();
+            return;
+        }
         UpdateBusy = true;
         UpdateFraction = -1;
         try
@@ -145,18 +196,58 @@ public partial class PlayViewModel
         }
     }
 
-    [RelayCommand]
-    private void OpenLauncherRelease()
+    /// <summary>Fallback for installs that cannot replace themselves
+    /// (AppImage, package manager): download the platform asset into the
+    /// Downloads folder and tell the user where it is.</summary>
+    private async Task DownloadLauncherUpdateAsync()
     {
-        if (_playUpdate is not { } info)
+        if (_playUpdate is not { IsNewer: true } info ||
+            info.AssetUrl is not { } assetUrl ||
+            info.AssetName is not { } assetName)
             return;
+        UpdateBusy = true;
+        UpdateFraction = -1;
         try
         {
-            Process.Start(new ProcessStartInfo(info.Url) { UseShellExecute = true });
+            var downloads = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            Directory.CreateDirectory(downloads);
+            var destination = Path.Combine(downloads, assetName);
+            var progress = new Progress<string>(s =>
+            {
+                UpdateStatus = s;
+                UpdateFraction = HttpDownload.PercentOf(s) is { } percent ? percent / 100 : -1;
+            });
+            await HttpDownload.ToFileAsync(
+                new HttpClient { Timeout = TimeSpan.FromMinutes(15) },
+                assetUrl, destination, progress, $"Downloading {assetName}");
+            UpdateStatus = $"Saved {assetName} to your Downloads folder — open it and follow the release notes.";
         }
         catch (Exception ex)
         {
-            UpdateStatus = $"Version {info.Tag} is available at {info.Url} ({ex.Message})";
+            UpdateStatus = $"Download failed: {ex.Message}";
+        }
+        finally
+        {
+            UpdateBusy = false;
+            UpdateFraction = -1;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenLauncherRelease()
+    {
+        // When the check never returned an update (offline), fall back to the
+        // project's latest release page so there is always an install path.
+        var url = _playUpdate?.Url
+            ?? $"https://github.com/{UpdateService.Owner}/{UpdateService.Repo}/releases/latest";
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus = $"The release page is at {url} ({ex.Message})";
         }
     }
 }
