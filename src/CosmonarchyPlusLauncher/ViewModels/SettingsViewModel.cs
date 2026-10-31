@@ -104,7 +104,16 @@ public partial class SettingsViewModel : ViewModelBase
     public bool UpdateBarIndeterminate => UpdateBusy && DownloadFraction < 0;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanDownloadUpdate))]
+    private bool _hasUpdate;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanDownloadUpdate))]
     private bool _canInstallUpdate;
+
+    /// <summary>The fallback for installs that cannot replace themselves:
+    /// an update exists, but the download button is what applies.</summary>
+    public bool CanDownloadUpdate => HasUpdate && !CanInstallUpdate;
 
     [ObservableProperty]
     private bool _canOpenRelease;
@@ -168,40 +177,58 @@ public partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task CheckForUpdatesAsync()
     {
+        // Transient GitHub failures (rate limits, dropped connections) used
+        // to leave the row stuck on "offline" with no install button at all.
+        // Retry a couple of times before giving up.
         UpdateBusy = true;
-        LatestVersion = "…";
-        UpdateStatus = $"Checking for updates (current: {CurrentVersion})…";
-        var service = new UpdateService();
-        var versions = await service.GetVersionsAsync();
-        if (versions is not null)
+        for (var attempt = 1; ; attempt++)
         {
-            LatestVersion = versions.LatestReleaseTag ?? "none";
-            LatestPrerelease = versions.LatestPrereleaseTag ?? "";
-        }
-        var info = await service.CheckAsync(CurrentVersion);
-        _update = info;
-        if (info is null)
-        {
-            if (versions is null)
+            LatestVersion = "…";
+            UpdateStatus = $"Checking for updates (current: {CurrentVersion})…";
+            var service = new UpdateService();
+            var versions = await service.GetVersionsAsync();
+            if (versions is not null)
             {
-                LatestVersion = "offline";
-                UpdateStatus = "Could not check for updates (offline or rate-limited?).";
+                LatestVersion = versions.LatestReleaseTag ?? "none";
+                LatestPrerelease = versions.LatestPrereleaseTag ?? "";
             }
+            var info = await service.CheckAsync(CurrentVersion);
+            _update = info;
+            if (info is null)
+            {
+                HasUpdate = false;
+                CanInstallUpdate = false;
+                if (attempt < 3)
+                {
+                    UpdateStatus = $"Could not check for updates (offline or rate-limited?) — retrying ({attempt}/3)…";
+                    await Task.Delay(TimeSpan.FromSeconds(20));
+                    continue;
+                }
+                if (versions is null)
+                    LatestVersion = "offline";
+                UpdateStatus = "Could not check for updates (offline or rate-limited?) — use the release page.";
+            }
+            else if (!info.IsNewer)
+            {
+                HasUpdate = false;
+                CanInstallUpdate = false;
+                UpdateStatus = $"You are on the latest version ({CurrentVersion}).";
+            }
+            else
+            {
+                var kind = SelfUpdater.GetInstallKind();
+                HasUpdate = true;
+                CanInstallUpdate = info.AssetUrl is not null && kind is InstallKind.LinuxDirectory or InstallKind.WindowsSingleFile;
+                UpdateStatus = CanInstallUpdate
+                    ? $"Version {info.Tag} is available ({info.AssetName}). Install it right here — the launcher restarts itself."
+                    : info.AssetUrl is null
+                        ? $"Version {info.Tag} is available, but this release has no file for this platform — use the release page."
+                        : $"Version {info.Tag} is available. This install updates elsewhere (AppImage or package manager) — the button downloads {info.AssetName} to your Downloads folder.";
+            }
+            CanOpenRelease = _update is not null || LatestVersion == "offline";
+            UpdateBusy = false;
+            return;
         }
-        else if (!info.IsNewer)
-        {
-            UpdateStatus = $"You are on the latest version ({CurrentVersion}).";
-        }
-        else
-        {
-            var kind = SelfUpdater.GetInstallKind();
-            CanInstallUpdate = info.AssetUrl is not null && kind is InstallKind.LinuxDirectory or InstallKind.WindowsSingleFile;
-            UpdateStatus = CanInstallUpdate
-                ? $"Version {info.Tag} is available ({info.AssetName}). Install it right here — the launcher restarts itself."
-                : $"Version {info.Tag} is available. This install updates elsewhere (AppImage or package manager) — use the release page.";
-        }
-        CanOpenRelease = _update is not null;
-        UpdateBusy = false;
     }
 
     [RelayCommand]
@@ -209,6 +236,11 @@ public partial class SettingsViewModel : ViewModelBase
     {
         if (_update is not { IsNewer: true } info)
             return;
+        if (!CanInstallUpdate)
+        {
+            await DownloadUpdateAsync();
+            return;
+        }
         UpdateBusy = true;
         DownloadFraction = -1;
         try
@@ -232,18 +264,59 @@ public partial class SettingsViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Fallback for installs that cannot replace themselves
+    /// (AppImage, package manager): download the platform asset into the
+    /// Downloads folder and tell the user where it is.</summary>
     [RelayCommand]
-    private void OpenRelease()
+    private async Task DownloadUpdateAsync()
     {
-        if (_update is not { } info)
+        if (_update is not { IsNewer: true } info ||
+            info.AssetUrl is not { } assetUrl ||
+            info.AssetName is not { } assetName)
             return;
+        UpdateBusy = true;
+        DownloadFraction = -1;
         try
         {
-            Process.Start(new ProcessStartInfo(info.Url) { UseShellExecute = true });
+            var downloads = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            Directory.CreateDirectory(downloads);
+            var destination = Path.Combine(downloads, assetName);
+            var progress = new Progress<string>(s =>
+            {
+                UpdateStatus = s;
+                DownloadFraction = HttpDownload.PercentOf(s) is { } percent ? percent / 100 : -1;
+            });
+            await HttpDownload.ToFileAsync(
+                new HttpClient { Timeout = TimeSpan.FromMinutes(15) },
+                assetUrl, destination, progress, $"Downloading {assetName}");
+            UpdateStatus = $"Saved {assetName} to your Downloads folder — open it and follow the release notes.";
         }
         catch (Exception ex)
         {
-            UpdateStatus = $"Version {info.Tag} is available at {info.Url} ({ex.Message})";
+            UpdateStatus = $"Download failed: {ex.Message}";
+        }
+        finally
+        {
+            UpdateBusy = false;
+            DownloadFraction = -1;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenRelease()
+    {
+        // When the check never returned an update (offline), fall back to the
+        // project's latest release page so there is always an install path.
+        var url = _update?.Url
+            ?? $"https://github.com/{UpdateService.Owner}/{UpdateService.Repo}/releases/latest";
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus = $"The release page is at {url} ({ex.Message})";
         }
     }
 }

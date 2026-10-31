@@ -14,7 +14,7 @@
         <Border Grid.Row="0" Margin="0,0,0,12" Padding="14,10" CornerRadius="6"
                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <Button Grid.Column="0" Content="Update Cosmonarchy Launcher" MinWidth="230"
+                <Button Grid.Column="0" Content="{Binding InstallLabel}" MinWidth="230"
                         Padding="18,10" FontSize="15" FontWeight="SemiBold"
                         Command="{Binding InstallLauncherUpdateCommand}"
                         IsEnabled="{Binding UpdateAvailable}" />
@@ -36,7 +36,7 @@
                     <Button Content="Check now" Command="{Binding CheckForLauncherUpdateCommand}"
                             IsEnabled="{Binding !UpdateBusy}" />
                     <Button Content="Release page" Command="{Binding OpenLauncherReleaseCommand}"
-                            IsVisible="{Binding UpdateAvailable}" />
+                            IsVisible="{Binding CanOpenReleasePage}" />
                     <ProgressBar IsVisible="{Binding UpdateBusy}" Minimum="0" Maximum="100"
                                  Value="{Binding UpdatePercent}"
                                  IsIndeterminate="{Binding UpdateBarIndeterminate}" MinWidth="120" />

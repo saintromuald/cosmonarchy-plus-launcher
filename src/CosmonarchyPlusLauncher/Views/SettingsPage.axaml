@@ -104,6 +104,8 @@
                         IsEnabled="{Binding !UpdateBusy}" />
                 <Button Content="Update now" Command="{Binding InstallUpdateCommand}"
                         IsVisible="{Binding CanInstallUpdate}" IsEnabled="{Binding !UpdateBusy}" />
+                <Button Content="Download update" Command="{Binding DownloadUpdateCommand}"
+                        IsVisible="{Binding CanDownloadUpdate}" IsEnabled="{Binding !UpdateBusy}" />
                 <Button Content="Open release page" Command="{Binding OpenReleaseCommand}"
                         IsVisible="{Binding CanOpenRelease}" />
                 <StackPanel Spacing="6" VerticalAlignment="Center">
