@@ -58,6 +58,39 @@ public partial class SettingsViewModel : ViewModelBase
             ? "Unlocked on this machine."
             : (RemasteredAccess.IsBundleInstalled ? "Locked." : "Locked (bundle not installed).");
 
+    /// <summary>Installed bundle marker + channel as one label, e.g.
+    /// "v1-pre1 (prerelease)" or "not installed".</summary>
+    [ObservableProperty]
+    private string _remasteredInstalled = FormatRemasteredInstalled();
+
+    /// <summary>Newest bundle release tag of the selected channel: "not
+    /// checked" before the first check, "…" while checking, "offline" when
+    /// the check could not reach GitHub.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RemasteredUpdateAvailable))]
+    private string _remasteredLatest = "not checked";
+
+    /// <summary>True when the installed bundle is the newest release of the
+    /// selected channel — drives the "✓ up to date" confirmation.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RemasteredUpdateAvailable))]
+    private bool _remasteredUpToDate;
+
+    /// <summary>True when a newer bundle exists for the selected channel —
+    /// shows the "Update to latest" button.</summary>
+    public bool RemasteredUpdateAvailable =>
+        !RemasteredUpToDate &&
+        RemasteredLatest is not ("not checked" or "offline" or "…" or "");
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRemasteredUpdateStatus))]
+    private string _remasteredUpdateStatus = "";
+
+    public bool HasRemasteredUpdateStatus => RemasteredUpdateStatus.Length > 0;
+
+    [ObservableProperty]
+    private bool _remasteredChecking;
+
     [ObservableProperty]
     private string _communityRepo = AppRuntime.Settings.CommunityRepo;
 
@@ -125,6 +158,11 @@ public partial class SettingsViewModel : ViewModelBase
         // Populate the version display as soon as the page opens (the result
         // lands in LatestVersion/UpdateStatus; the button re-checks on demand).
         _ = CheckForUpdatesAsync();
+
+        // Show the remastered bundle's up-to-date state as soon as the page
+        // opens for unlocked machines (the button re-checks on demand).
+        if (RemasteredAccess.IsUnlocked(AppRuntime.Settings))
+            _ = CheckRemasteredAsync();
     }
 
     [RelayCommand]
@@ -132,7 +170,94 @@ public partial class SettingsViewModel : ViewModelBase
     {
         RemasteredStatus = RemasteredAccess.TryUnlock(_settings, RemasteredPassword);
         if (!RemasteredStatus.StartsWith("Wrong password", StringComparison.Ordinal))
+        {
             RemasteredPassword = "";
+            RemasteredInstalled = FormatRemasteredInstalled();
+            _ = CheckRemasteredAsync();
+        }
+    }
+
+    /// <summary>Installed bundle marker + channel as one label.</summary>
+    private static string FormatRemasteredInstalled()
+    {
+        var (tag, channel) = RemasteredAccess.ReadInstalledVersion();
+        if (tag.Length == 0)
+            return RemasteredAccess.IsBundleInstalled ? "unknown" : "not installed";
+        return channel is null ? tag : $"{tag} ({channel})";
+    }
+
+    /// <summary>Check the selected bundle channel and update the visual
+    /// up-to-date confirmation.</summary>
+    [RelayCommand]
+    private async Task CheckRemasteredAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(RemasteredBundleUrl))
+        {
+            RemasteredLatest = "manual";
+            RemasteredUpToDate = true;
+            RemasteredUpdateStatus = "A manual bundle URL is set — channel updates are skipped.";
+            return;
+        }
+        RemasteredChecking = true;
+        RemasteredUpToDate = false;
+        RemasteredLatest = "…";
+        RemasteredUpdateStatus = $"Checking the {RemasteredChannel} channel…";
+        try
+        {
+            var latest = await Task.Run(
+                () => RemasteredAccess.TryResolveLatest(RemasteredChannel));
+            var (installedTag, _) = RemasteredAccess.ReadInstalledVersion();
+            if (latest is null)
+            {
+                RemasteredLatest = "offline";
+                RemasteredUpdateStatus = "Could not check the bundle channel (offline or rate-limited?).";
+            }
+            else
+            {
+                RemasteredLatest = latest.Tag;
+                RemasteredUpToDate = installedTag == latest.Tag;
+                RemasteredUpdateStatus = RemasteredUpToDate
+                    ? $"This machine is on the latest {RemasteredChannel} bundle ({latest.Tag})."
+                    : $"A newer {RemasteredChannel} bundle is available ({latest.Tag}). Enter the unlock password and press “Update to latest”.";
+            }
+        }
+        catch (Exception ex)
+        {
+            RemasteredLatest = "offline";
+            RemasteredUpdateStatus = $"Could not check the bundle channel: {ex.Message}";
+        }
+        finally
+        {
+            RemasteredChecking = false;
+        }
+    }
+
+    /// <summary>Fetch the newest bundle of the selected channel, decrypt it
+    /// with the unlock password, and replace the installed bundle.</summary>
+    [RelayCommand]
+    private async Task UpdateRemasteredAsync()
+    {
+        if (string.IsNullOrWhiteSpace(RemasteredPassword))
+        {
+            RemasteredUpdateStatus = "Enter the unlock password, then press “Update to latest” again.";
+            return;
+        }
+        RemasteredChecking = true;
+        try
+        {
+            var result = await Task.Run(
+                () => RemasteredAccess.TryUpdateBundle(_settings, RemasteredPassword));
+            RemasteredUpdateStatus = result;
+            if (!result.StartsWith("Wrong password", StringComparison.Ordinal))
+                RemasteredPassword = "";
+            RemasteredInstalled = FormatRemasteredInstalled();
+            var (installedTag, _) = RemasteredAccess.ReadInstalledVersion();
+            RemasteredUpToDate = installedTag == RemasteredLatest;
+        }
+        finally
+        {
+            RemasteredChecking = false;
+        }
     }
 
     [RelayCommand]

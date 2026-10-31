@@ -90,10 +90,14 @@ public static class RemasteredAccess
 
         if (IsBundleInstalled)
         {
-            var localTag = File.Exists(BundleVersionPath)
-                ? File.ReadAllText(BundleVersionPath).Trim()
-                : "";
-            var latest = ResolveLatest(settings.RemasteredChannel);
+            // Compare against the tag line only: legacy markers are a bare
+            // tag, newer launchers write "tag\nchannel" (see
+            // ReadInstalledVersion). Comparing the whole file used to
+            // re-download the same bundle on every unlock.
+            var latest = TryResolveLatest(settings.RemasteredChannel);
+            if (latest is null)
+                return "Unlocked on this machine (could not check the channel — offline?).";
+            var (localTag, _) = ReadInstalledVersion();
             if (latest.Tag == localTag)
                 return "Unlocked on this machine (latest bundle).";
             var updated = EnsureBundle(settings, password, latest);
@@ -146,7 +150,7 @@ public static class RemasteredAccess
         }
     }
 
-    /// <summary>Resolve the newest bundle asset of the given channel from
+    /// <summary>Resolve the newest bundle release of the given channel from
     /// GitHub releases. Public repo, no auth needed; the payload is
     /// ciphertext and useless without the unlock password.</summary>
     public static BundleRelease ResolveLatest(string channel)
@@ -171,6 +175,48 @@ public static class RemasteredAccess
         var asset = release.Assets.FirstOrDefault(a => a.Name == BundleAssetName)
             ?? throw new InvalidOperationException($"no {BundleAssetName} asset");
         return new BundleRelease(asset.BrowserDownloadUrl, release.TagName);
+    }
+
+    /// <summary>Resolve the newest bundle release of the given channel, or
+    /// null when it cannot be resolved (offline, rate-limited, no asset).</summary>
+    public static BundleRelease? TryResolveLatest(string channel)
+    {
+        try
+        {
+            return ResolveLatest(channel);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Update the installed bundle to the newest release of the
+    /// selected channel. The unlock password is required to decrypt the
+    /// bundle and is never stored. Returns a user-facing status line.</summary>
+    public static string TryUpdateBundle(AppSettings settings, string password)
+    {
+        var hash = Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(password + ":unlock")))
+            .ToLowerInvariant();
+        if (!string.Equals(hash, UnlockHash, StringComparison.Ordinal))
+            return "Wrong password.";
+
+        if (!string.IsNullOrWhiteSpace(settings.RemasteredBundleUrl))
+            return "A manual bundle URL is set — clear it in Settings to update from the channel.";
+
+        var latest = TryResolveLatest(settings.RemasteredChannel);
+        if (latest is null)
+            return "Could not reach the bundle channel (offline or rate-limited?).";
+
+        var (installedTag, _) = ReadInstalledVersion();
+        if (installedTag == latest.Tag)
+            return $"Already on the latest {settings.RemasteredChannel} bundle ({latest.Tag}).";
+
+        var ok = EnsureBundle(settings, password, latest);
+        return ok
+            ? $"Bundle updated to {latest.Tag} ({settings.RemasteredChannel})."
+            : "The update could not be fetched or extracted.";
     }
 
     private static byte[] Fetch(string url)
